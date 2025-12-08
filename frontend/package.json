@@ -1,0 +1,48 @@
+{
+  "name": "forex-ai-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-label": "^2.1.8",
+    "@radix-ui/react-select": "^2.2.6",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@radix-ui/react-tabs": "^1.1.13",
+    "@radix-ui/react-toast": "^1.2.15",
+    "@tanstack/react-query": "5.59.17",
+    "axios": "^1.13.2",
+    "date-fns": "^4.1.0",
+    "lightweight-charts": "^4.1.0",
+    "lucide-react": "^0.556.0",
+    "next": "14.2.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-hook-form": "^7.68.0",
+    "socket.io-client": "^4.8.1",
+    "sonner": "^2.0.7",
+    "zod": "^4.1.13",
+    "zustand": "4.5.5"
+  },
+  "devDependencies": {
+    "@types/node": "22.9.3",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "autoprefixer": "^10.4.16",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "eslint": "8.57.1",
+    "eslint-config-next": "14.2.5",
+    "postcss": "^8.4.32",
+    "tailwind-merge": "^3.4.0",
+    "tailwindcss": "^3.4.0",
+    "tailwindcss-animate": "^1.0.7",
+    "typescript": "5.6.3"
+  }
+}

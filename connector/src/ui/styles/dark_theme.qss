@@ -1,0 +1,12 @@
+QWidget {
+    background-color: #0f172a;
+    color: #e2e8f0;
+    font-family: "Segoe UI";
+}
+
+QPushButton {
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    padding: 8px 12px;
+    border-radius: 6px;
+}

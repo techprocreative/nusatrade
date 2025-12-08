@@ -1,0 +1,115 @@
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+from app.config import get_settings
+from app.api.v1.router import api_router
+from app.api.v1.health import router as health_router
+from app.api.websocket.connector import router as ws_router
+from app.core.logging import get_logger, setup_logging
+from app.core.middleware import setup_middleware
+from app.core.security import SecurityHeadersMiddleware, RateLimitMiddleware
+from app.core.errors import TradeError
+from app.core.monitoring import init_sentry
+
+
+settings = get_settings()
+logger = get_logger(__name__)
+
+# Initialize Sentry monitoring
+init_sentry()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan events."""
+    # Startup
+    setup_logging()
+    logger.info(f"Starting {settings.app_name} in {settings.environment} mode")
+    logger.info(f"Debug: {settings.debug}, Log Level: {settings.log_level}")
+    
+    # Warn about default secrets
+    if settings.jwt_secret == "your-secret-key" or len(settings.jwt_secret) < 32:
+        logger.warning("⚠️  JWT_SECRET not set or too short! Set a strong secret in production.")
+    
+    yield
+    
+    # Shutdown
+    logger.info(f"Shutting down {settings.app_name}")
+
+
+cors_origins = settings.cors_origins()
+
+app = FastAPI(
+    title=settings.app_name,
+    version="1.0.0",
+    description="AI-powered forex trading platform with ML bots and LLM supervisor",
+    lifespan=lifespan,
+    docs_url="/docs" if settings.is_development else None,
+    redoc_url="/redoc" if settings.is_development else None,
+)
+
+# CORS middleware (must be added before custom middleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Security headers middleware
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Rate limiting middleware (production only)
+if settings.environment == "production":
+    app.add_middleware(
+        RateLimitMiddleware,
+        requests_per_minute=settings.rate_limit_per_minute,
+        requests_per_hour=settings.rate_limit_per_hour,
+    )
+
+# Setup custom middleware stack
+setup_middleware(app)
+
+
+# Exception handlers
+@app.exception_handler(ValueError)
+async def value_error_handler(request: Request, exc: ValueError):
+    logger.warning(f"ValueError: {exc}")
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={"detail": str(exc)},
+    )
+
+
+@app.exception_handler(PermissionError)
+async def permission_error_handler(request: Request, exc: PermissionError):
+    logger.warning(f"PermissionError: {exc}")
+    return JSONResponse(
+        status_code=status.HTTP_403_FORBIDDEN,
+        content={"detail": str(exc)},
+    )
+
+
+@app.exception_handler(TradeError)
+async def trade_error_handler(request: Request, exc: TradeError):
+    """Handle trading errors with proper response."""
+    logger.error(f"TradeError [{exc.error_type.value}]: {exc.message}")
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "detail": exc.message,
+            "error_type": exc.error_type.value,
+            "retryable": exc.retryable,
+        },
+    )
+
+
+# Include routers
+app.include_router(health_router, prefix="/api/v1", tags=["Health"])
+app.include_router(api_router, prefix="/api/v1")
+app.include_router(ws_router, prefix="/connector")
+
