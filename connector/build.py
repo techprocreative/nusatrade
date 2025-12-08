@@ -34,17 +34,48 @@ def build():
         cmd.append(f"--icon={icon_path}")
 
     # Add hidden imports for MT5 and PyQt6
+    # PyQt6 requires explicit imports for all submodules
     hidden_imports = [
+        # MetaTrader5
         "MetaTrader5",
+        # PyQt6 - Core modules
+        "PyQt6",
         "PyQt6.QtCore",
-        "PyQt6.QtWidgets",
+        "PyQt6.QtWidgets", 
         "PyQt6.QtGui",
+        "PyQt6.sip",
+        # PyQt6 - Additional required modules
+        "PyQt6.QtNetwork",
+        "PyQt6.QtSvg",
+        "PyQt6.QtSvgWidgets",
+        # Networking
         "websockets",
+        "websockets.client",
+        "websockets.exceptions",
         "ssl",
         "asyncio",
+        # Data validation
+        "pydantic",
+        "pydantic.fields",
+        # Crypto
+        "cryptography",
+        "cryptography.fernet",
+        # HTTP
+        "requests",
+        "tenacity",
+        # Standard library
+        "json",
+        "logging",
+        "dataclasses",
+        "typing",
     ]
     for imp in hidden_imports:
         cmd.append(f"--hidden-import={imp}")
+
+    # Collect all files for packages that need binaries/data
+    collect_all_packages = ["PyQt6"]
+    for pkg in collect_all_packages:
+        cmd.append(f"--collect-all={pkg}")
 
     # Add data files
     if resources_dir.exists():
