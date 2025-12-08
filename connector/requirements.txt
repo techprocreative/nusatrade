@@ -4,8 +4,12 @@
 # GUI Framework
 PyQt6>=6.7.0
 
-# MetaTrader 5 API (Windows only)
-MetaTrader5>=5.0.45
+# MetaTrader 5 API (Windows 64-bit only, Python 3.8-3.12)
+# If installation fails, ensure you have:
+# 1. Windows OS (not Linux/Mac)
+# 2. Python 64-bit (not 32-bit)
+# 3. MetaTrader 5 terminal installed
+MetaTrader5
 
 # WebSocket Client
 websockets>=13.0
