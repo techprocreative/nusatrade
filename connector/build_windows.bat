@@ -32,6 +32,10 @@ REM Install dependencies
 echo [INFO] Menginstall dependencies...
 pip install -r requirements.txt --quiet
 
+REM Ensure PyInstaller is installed
+echo [INFO] Menginstall PyInstaller...
+pip install pyinstaller --quiet
+
 REM Create resources folder if not exists
 if not exist "resources" mkdir resources
 
