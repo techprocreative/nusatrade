@@ -299,7 +299,7 @@ def run_backtest(
         config = BacktestConfig(
             initial_balance=request.initial_balance,
             commission=request.commission,
-            slippage=request.slippage,
+            slippage_pips=request.slippage * 10000 if request.slippage else 0.5,
         )
 
         # Create strategy instance based on type
@@ -310,12 +310,15 @@ def run_backtest(
         else:
             bt_strategy = MACrossoverStrategy(**(strategy.config or {}))
 
+        # Set data_manager's data directly (bypass load)
+        data_manager._data = df
+
         # Run backtest
-        engine = BacktestEngine(config)
-        result_data = engine.run(df, bt_strategy)
+        engine = BacktestEngine(data_manager, bt_strategy, config)
+        result_data = engine.run()
 
         # Calculate metrics
-        metrics = calculate_metrics(result_data["trades"], result_data["equity_curve"])
+        metrics = calculate_metrics(result_data["trades"], result_data["equity_curve"], request.initial_balance)
 
         # Save result
         result = BacktestResult(
@@ -338,11 +341,11 @@ def run_backtest(
             equity_curve=result_data["equity_curve"],
             trades=[
                 {
-                    "symbol": t.symbol,
-                    "order_type": t.order_type.value,
-                    "entry_price": t.entry_price,
-                    "exit_price": t.exit_price,
-                    "profit": t.profit,
+                    "symbol": t.get("symbol") if isinstance(t, dict) else t.symbol,
+                    "order_type": t.get("order_type") if isinstance(t, dict) else t.order_type.value,
+                    "entry_price": t.get("entry_price") if isinstance(t, dict) else t.entry_price,
+                    "exit_price": t.get("exit_price") if isinstance(t, dict) else t.exit_price,
+                    "profit": t.get("profit") if isinstance(t, dict) else t.profit,
                 }
                 for t in result_data["trades"][:100]  # Limit stored trades
             ],

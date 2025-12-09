@@ -305,8 +305,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 def get_encryption_key() -> bytes:
     """Get encryption key for system settings."""
-    import os
-    key = os.getenv("SETTINGS_ENCRYPTION_KEY")
+    # First try settings (loaded from .env), then fall back to os.getenv
+    key = settings.settings_encryption_key
+    if not key:
+        import os
+        key = os.getenv("SETTINGS_ENCRYPTION_KEY")
     if not key:
         # In development, use a default key (NOT for production!)
         if settings.environment == "development":

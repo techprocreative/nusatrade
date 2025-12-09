@@ -52,6 +52,8 @@ class LLMClient:
     def __init__(self):
         self.client = None
         self.anthropic_client = None  # Fallback only
+        self._db_config_loaded = False  # Track if config was loaded from database
+        self._current_model = None
         self._init_clients()
 
     def _init_clients(self, db: Optional[Session] = None):
@@ -88,10 +90,14 @@ class LLMClient:
                     api_key=config["api_key"],
                     base_url=config["base_url"]
                 )
+                self._current_model = config["model"]
+                self._db_config_loaded = db is not None
                 provider = config["base_url"] or "OpenAI"
-                logger.info(f"LLM client initialized (provider: {provider}, model: {config['model']})")
+                logger.info(f"LLM client initialized (provider: {provider}, model: {config['model']}, from_db: {self._db_config_loaded})")
             except ImportError:
                 logger.warning("openai package not installed")
+        else:
+            logger.warning(f"No LLM API key found (from_db: {db is not None})")
 
         # Keep Anthropic as fallback
         if settings.anthropic_api_key:
@@ -129,7 +135,7 @@ class LLMClient:
                 full_messages.extend(messages)
 
                 response = self.client.chat.completions.create(
-                    model=settings.effective_llm_config["model"],
+                    model=self._current_model or settings.effective_llm_config["model"],
                     messages=full_messages,
                     max_tokens=1000,
                     temperature=0.7,
@@ -206,6 +212,10 @@ async def chat(
 ):
     """Chat with the AI Supervisor."""
     
+    # Ensure LLM client is initialized with database config
+    if not llm_client._db_config_loaded:
+        llm_client.reload_config(db)
+    
     # Get or create conversation
     if request.conversation_id:
         conversation = db.query(Conversation).filter(
@@ -254,7 +264,7 @@ async def chat(
 
     return ChatResponse(
         reply=reply,
-        conversation_id=conversation.id,
+        conversation_id=str(conversation.id),
         tokens_used=tokens,
     )
 
@@ -338,6 +348,10 @@ async def daily_analysis(
     current_user=Depends(deps.get_current_user),
 ):
     """Get daily market analysis."""
+    # Ensure LLM client is initialized with database config
+    if not llm_client._db_config_loaded:
+        llm_client.reload_config(db)
+    
     prompt = """Provide a brief daily forex market analysis covering:
 1. Major pairs outlook (EURUSD, GBPUSD, USDJPY)
 2. Key support and resistance levels
@@ -364,6 +378,10 @@ async def symbol_analysis(
     current_user=Depends(deps.get_current_user),
 ):
     """Get analysis for a specific symbol."""
+    # Ensure LLM client is initialized with database config
+    if not llm_client._db_config_loaded:
+        llm_client.reload_config(db)
+    
     prompt = f"""Analyze {symbol.upper()} forex pair:
 1. Current trend direction
 2. Key support and resistance levels
@@ -390,6 +408,10 @@ async def get_recommendations(
     current_user=Depends(deps.get_current_user),
 ):
     """Get trading recommendations based on user's history."""
+    # Ensure LLM client is initialized with database config
+    if not llm_client._db_config_loaded:
+        llm_client.reload_config(db)
+    
     # TODO: Fetch user's trade history and provide personalized recommendations
     
     prompt = """Based on general forex trading best practices, provide 3-5 actionable recommendations for improving trading performance. Focus on:
@@ -510,6 +532,10 @@ async def generate_strategy(
     current_user=Depends(deps.get_current_user),
 ):
     """Generate a trading strategy using AI based on natural language description."""
+    
+    # Ensure LLM client is initialized with database config
+    if not llm_client._db_config_loaded:
+        llm_client.reload_config(db)
     
     # Build the prompt
     indicators_text = ""
