@@ -23,3 +23,9 @@ class User(Base):
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    @property
+    def is_admin(self) -> bool:
+        """Check if user has admin role."""
+        return self.role == "admin"
+
