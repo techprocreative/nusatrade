@@ -142,3 +142,90 @@ export interface DashboardStats {
   total_trades: number;
   win_rate: number;
 }
+
+// Strategy types
+export interface TradingStrategy {
+  id: string;
+  name: string;
+  description: string;
+  strategy_type: 'ai_generated' | 'custom' | 'preset';
+  code: string;
+  parameters: StrategyParameter[];
+  indicators: string[];
+  entry_rules: StrategyRule[];
+  exit_rules: StrategyRule[];
+  risk_management: RiskManagement;
+  is_active: boolean;
+  backtest_results?: BacktestMetrics;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StrategyParameter {
+  name: string;
+  type: 'number' | 'string' | 'boolean';
+  default_value: string | number | boolean;
+  description?: string;
+  min?: number;
+  max?: number;
+}
+
+export interface StrategyRule {
+  id: string;
+  condition: string;
+  action: 'BUY' | 'SELL' | 'CLOSE';
+  description: string;
+}
+
+export interface RiskManagement {
+  stop_loss_type: 'fixed_pips' | 'atr_based' | 'percentage';
+  stop_loss_value: number;
+  take_profit_type: 'fixed_pips' | 'risk_reward' | 'trailing';
+  take_profit_value: number;
+  max_position_size: number;
+  max_daily_loss?: number;
+}
+
+export interface BacktestMetrics {
+  net_profit: number;
+  total_trades: number;
+  winning_trades: number;
+  win_rate: number;
+  profit_factor: number;
+  max_drawdown_pct: number;
+  sharpe_ratio: number;
+}
+
+export interface AIStrategyRequest {
+  prompt: string;
+  symbol?: string;
+  timeframe?: string;
+  risk_profile?: 'conservative' | 'moderate' | 'aggressive';
+  preferred_indicators?: string[];
+}
+
+export interface AIStrategyResponse {
+  strategy: TradingStrategy;
+  explanation: string;
+  warnings: string[];
+  suggested_improvements: string[];
+}
+
+export interface CreateStrategyRequest {
+  name: string;
+  description: string;
+  strategy_type: 'ai_generated' | 'custom' | 'preset';
+  code?: string;
+  parameters?: StrategyParameter[];
+  indicators?: string[];
+  entry_rules?: StrategyRule[];
+  exit_rules?: StrategyRule[];
+  risk_management?: RiskManagement;
+}
+
+export interface QuickBacktestRequest {
+  strategy_id: string;
+  symbol: string;
+  timeframe: string;
+  days?: number;
+}

@@ -3,10 +3,10 @@ import apiClient from '@/lib/api-client';
 import type { BacktestConfig, BacktestResult } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
-// Fetch strategies
-export function useStrategies() {
+// Fetch backtest strategies (preset strategies for backtesting)
+export function useBacktestStrategies() {
   return useQuery({
-    queryKey: ['strategies'],
+    queryKey: ['backtest-strategies'],
     queryFn: async () => {
       const response = await apiClient.get('/api/v1/backtest/strategies');
       return response.data;

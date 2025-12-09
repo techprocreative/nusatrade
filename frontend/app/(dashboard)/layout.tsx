@@ -24,12 +24,14 @@ import {
   Wifi,
   WifiOff,
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  Sparkles
 } from "lucide-react";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/trading", label: "Trading", icon: LineChart },
+  { href: "/strategies", label: "Strategies", icon: Sparkles },
   { href: "/backtest", label: "Backtest", icon: TestTube2 },
   { href: "/bots", label: "ML Bots", icon: Bot },
   { href: "/ai-supervisor", label: "AI Supervisor", icon: Brain },

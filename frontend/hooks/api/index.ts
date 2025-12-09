@@ -5,3 +5,4 @@ export * from './useBacktest';
 export * from './useAI';
 export * from './use2FA';
 export * from './useConnections';
+export * from './useStrategies';

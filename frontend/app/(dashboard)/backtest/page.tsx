@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useStrategies, useRunBacktest, useBacktestResult } from "@/hooks/api";
+import { useBacktestStrategies, useRunBacktest, useBacktestResult, useStrategies } from "@/hooks/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,9 +38,16 @@ export default function BacktestPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
 
   // API hooks
-  const { data: strategies = [] } = useStrategies();
+  const { data: presetStrategies = [] } = useBacktestStrategies();
+  const { data: userStrategies = [] } = useStrategies();
   const runBacktestMutation = useRunBacktest();
   const { data: result, isLoading: loadingResult } = useBacktestResult(sessionId);
+
+  // Combine preset and user strategies
+  const allStrategies = [
+    ...presetStrategies,
+    ...userStrategies.map((s: any) => ({ id: s.id, name: s.name, type: 'user' })),
+  ];
 
   const SYMBOLS = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "XAUUSD"];
   const TIMEFRAMES = ["M15", "M30", "H1", "H4", "D1"];
@@ -105,10 +112,10 @@ export default function BacktestPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {strategies.length > 0 ? (
-                    strategies.map((strat: any) => (
+                  {allStrategies.length > 0 ? (
+                    allStrategies.map((strat: any) => (
                       <SelectItem key={strat.id} value={strat.id}>
-                        {strat.name}
+                        {strat.name} {strat.type === 'user' && '(Custom)'}
                       </SelectItem>
                     ))
                   ) : (
