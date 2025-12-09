@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     debug: bool = False
     log_level: str = "INFO"
-    backend_cors_origins: List[str] | str = ["http://localhost:3000", "http://localhost:8000"]
+    backend_cors_origins: List[str] | str = ["http://localhost:3000", "http://localhost:8000", "https://nusatrade-beta.vercel.app"]
 
     # Database
     database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/forex_ai"
