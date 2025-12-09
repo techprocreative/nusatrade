@@ -15,7 +15,10 @@ from app.models.strategy import Strategy
 from app.backtesting.engine import BacktestEngine, BacktestConfig
 from app.backtesting.data_manager import DataManager
 from app.backtesting.metrics import calculate_metrics
+from app.core.logging import get_logger
 
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -257,30 +260,39 @@ def run_backtest(
     db.commit()
 
     try:
-        # Try to load data and run backtest
-        data_manager = DataManager()
-        
-        # For demo, generate sample data if no real data available
+        # Try to load data from yfinance
         import pandas as pd
         import numpy as np
         
-        # Generate sample OHLCV data
-        n_bars = 500
-        dates = pd.date_range(start=request.start_date, end=request.end_date, periods=n_bars)
-        base_price = 1.0850
+        data_manager = DataManager(
+            symbol=request.symbol,
+            timeframe=request.timeframe,
+            start_date=datetime.strptime(request.start_date, "%Y-%m-%d"),
+            end_date=datetime.strptime(request.end_date, "%Y-%m-%d"),
+        )
         
-        np.random.seed(42)
-        returns = np.random.randn(n_bars) * 0.001
-        close_prices = base_price * np.exp(np.cumsum(returns))
-        
-        df = pd.DataFrame({
-            "timestamp": dates,
-            "open": close_prices * (1 + np.random.randn(n_bars) * 0.0005),
-            "high": close_prices * (1 + abs(np.random.randn(n_bars) * 0.001)),
-            "low": close_prices * (1 - abs(np.random.randn(n_bars) * 0.001)),
-            "close": close_prices,
-            "volume": np.random.randint(1000, 10000, n_bars),
-        })
+        try:
+            df = data_manager.load_from_yfinance()
+            logger.info(f"Loaded {len(df)} candles from yfinance for {request.symbol}")
+        except Exception as yf_error:
+            # Fallback to sample data if yfinance fails
+            logger.warning(f"Failed to load from yfinance: {yf_error}. Using sample data.")
+            n_bars = 500
+            dates = pd.date_range(start=request.start_date, end=request.end_date, periods=n_bars)
+            base_price = 1.0850 if "USD" in request.symbol else 100.0
+            
+            np.random.seed(42)
+            returns = np.random.randn(n_bars) * 0.001
+            close_prices = base_price * np.exp(np.cumsum(returns))
+            
+            df = pd.DataFrame({
+                "timestamp": dates,
+                "open": close_prices * (1 + np.random.randn(n_bars) * 0.0005),
+                "high": close_prices * (1 + abs(np.random.randn(n_bars) * 0.001)),
+                "low": close_prices * (1 - abs(np.random.randn(n_bars) * 0.001)),
+                "close": close_prices,
+                "volume": np.random.randint(1000, 10000, n_bars),
+            })
 
         # Create backtest config
         config = BacktestConfig(

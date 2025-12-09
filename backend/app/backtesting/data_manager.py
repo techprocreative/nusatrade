@@ -104,6 +104,28 @@ class DataManager:
         self._data = df.sort_values("timestamp").reset_index(drop=True)
         return self._data
 
+    def load_from_yfinance(self) -> pd.DataFrame:
+        """Load historical data from Yahoo Finance."""
+        from app.backtesting.data_providers.yfinance_provider import YFinanceDataProvider
+
+        if not self.start_date or not self.end_date:
+            raise ValueError("start_date and end_date are required for yfinance download")
+
+        provider = YFinanceDataProvider()
+        df = provider.download(
+            symbol=self.symbol,
+            timeframe=self.timeframe,
+            start_date=self.start_date,
+            end_date=self.end_date,
+        )
+
+        if df.empty:
+            raise ValueError(f"No data returned from yfinance for {self.symbol} {self.timeframe}")
+
+        self._data = df
+        logger.info(f"Loaded {len(df)} candles from yfinance for {self.symbol} {self.timeframe}")
+        return df
+
     def _normalize_columns(self, df: pd.DataFrame) -> pd.DataFrame:
         """Normalize column names to standard format."""
         column_mapping = {
