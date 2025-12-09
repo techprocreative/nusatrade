@@ -186,8 +186,33 @@ REFRESH_TOKEN_EXPIRE_DAYS=7
 BACKEND_CORS_ORIGINS=https://forexai.onrender.com,https://yourdomain.com
 
 # AI Provider
-OPENAI_API_KEY=sk-your-key-here
-OPENAI_MODEL=gpt-4-turbo-preview
+
+**Generate JWT Secret:**
+```bash
+openssl rand -hex 32
+```
+
+# AI/LLM Provider (OpenAI-Compatible)
+LLM_API_KEY=your-api-key-here
+LLM_MODEL=gpt-4-turbo-preview
+
+# Optional: Custom base URL for alternative providers
+# Leave empty to use OpenAI (default)
+# LLM_BASE_URL=
+
+# Examples for different providers:
+# OpenRouter: LLM_BASE_URL=https://openrouter.ai/api/v1
+# Together AI: LLM_BASE_URL=https://api.together.xyz/v1
+# Groq: LLM_BASE_URL=https://api.groq.com/openai/v1
+# Local: LLM_BASE_URL=http://localhost:11434/v1
+
+# Legacy (still supported)
+# OPENAI_API_KEY=sk-your-key
+# OPENAI_MODEL=gpt-4-turbo-preview
+
+# Anthropic (fallback only)
+ANTHROPIC_API_KEY=sk-ant-your-key
+ANTHROPIC_MODEL=claude-3-sonnet-20240229
 
 # Redis (we'll add this later)
 REDIS_URL=redis://default:***@***.upstash.io:6379
@@ -345,10 +370,23 @@ CELERY_BROKER_URL=redis://default:***@***.upstash.io:6379/1
 CELERY_RESULT_BACKEND=redis://default:***@***.upstash.io:6379/2
 
 # ============================================
-# AI/LLM
+# AI/LLM (OpenAI-Compatible)
 # ============================================
-OPENAI_API_KEY=sk-***
-OPENAI_MODEL=gpt-4-turbo-preview
+# Unified configuration (recommended)
+LLM_API_KEY=your-api-key
+LLM_MODEL=gpt-4-turbo-preview
+# LLM_BASE_URL=  # Optional: for alternative providers
+
+# Examples:
+# OpenRouter: LLM_BASE_URL=https://openrouter.ai/api/v1
+# Together AI: LLM_BASE_URL=https://api.together.xyz/v1
+# Groq: LLM_BASE_URL=https://api.groq.com/openai/v1
+
+# Legacy (still supported)
+# OPENAI_API_KEY=sk-***
+# OPENAI_MODEL=gpt-4-turbo-preview
+
+# Anthropic (fallback only)
 ANTHROPIC_API_KEY=sk-ant-***
 ANTHROPIC_MODEL=claude-3-sonnet-20240229
 

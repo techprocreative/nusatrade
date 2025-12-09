@@ -47,28 +47,37 @@ class MessageOut(BaseModel):
 
 # LLM Client wrapper
 class LLMClient:
-    """Wrapper for OpenAI and Anthropic APIs."""
+    """Unified LLM client supporting OpenAI-compatible APIs."""
 
     def __init__(self):
-        self.openai_client = None
-        self.anthropic_client = None
+        self.client = None
+        self.anthropic_client = None  # Fallback only
         self._init_clients()
 
     def _init_clients(self):
-        """Initialize available LLM clients."""
-        if settings.openai_api_key:
+        """Initialize LLM client with OpenAI-compatible interface."""
+        config = settings.effective_llm_config
+        
+        if config["api_key"]:
             try:
                 import openai
-                self.openai_client = openai.OpenAI(api_key=settings.openai_api_key)
-                logger.info("OpenAI client initialized")
+                # Support custom base_url for OpenAI-compatible providers
+                # If base_url is None, OpenAI SDK uses default (https://api.openai.com/v1)
+                self.client = openai.OpenAI(
+                    api_key=config["api_key"],
+                    base_url=config["base_url"]
+                )
+                provider = config["base_url"] or "OpenAI"
+                logger.info(f"LLM client initialized (provider: {provider}, model: {config['model']})")
             except ImportError:
                 logger.warning("openai package not installed")
 
+        # Keep Anthropic as fallback
         if settings.anthropic_api_key:
             try:
                 import anthropic
                 self.anthropic_client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-                logger.info("Anthropic client initialized")
+                logger.info("Anthropic fallback client initialized")
             except ImportError:
                 logger.warning("anthropic package not installed")
 
@@ -79,16 +88,16 @@ class LLMClient:
     ) -> tuple[str, int]:
         """Send chat request to LLM and get response."""
         
-        # Try OpenAI first
-        if self.openai_client:
+        # Try unified OpenAI-compatible client first
+        if self.client:
             try:
                 full_messages = []
                 if system_prompt:
                     full_messages.append({"role": "system", "content": system_prompt})
                 full_messages.extend(messages)
 
-                response = self.openai_client.chat.completions.create(
-                    model=settings.openai_model,
+                response = self.client.chat.completions.create(
+                    model=settings.effective_llm_config["model"],
                     messages=full_messages,
                     max_tokens=1000,
                     temperature=0.7,
@@ -97,7 +106,8 @@ class LLMClient:
                 tokens = response.usage.total_tokens if response.usage else 0
                 return content, tokens
             except Exception as e:
-                logger.error(f"OpenAI error: {e}")
+                logger.error(f"LLM API error: {e}")
+                # Fall through to Anthropic fallback
 
         # Fallback to Anthropic
         if self.anthropic_client:

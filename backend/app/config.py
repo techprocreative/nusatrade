@@ -26,7 +26,12 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
 
-    # AI/LLM (OpenAI primary, Claude fallback)
+    # AI/LLM (Unified OpenAI-compatible configuration)
+    llm_api_key: Optional[str] = None
+    llm_base_url: Optional[str] = None  # Custom base URL for OpenAI-compatible providers
+    llm_model: str = "gpt-4-turbo-preview"
+
+    # Legacy AI/LLM configuration (deprecated but still supported for backward compatibility)
     openai_api_key: Optional[str] = None
     openai_model: str = "gpt-4-turbo-preview"
     anthropic_api_key: Optional[str] = None
@@ -59,6 +64,15 @@ class Settings(BaseSettings):
         if isinstance(self.backend_cors_origins, str):
             return [o.strip() for o in self.backend_cors_origins.split(",") if o.strip()]
         return self.backend_cors_origins
+
+    @property
+    def effective_llm_config(self) -> dict:
+        """Get effective LLM configuration with fallback to legacy settings."""
+        return {
+            "api_key": self.llm_api_key or self.openai_api_key,
+            "base_url": self.llm_base_url,
+            "model": self.llm_model or self.openai_model,
+        }
 
     @property
     def is_production(self) -> bool:
