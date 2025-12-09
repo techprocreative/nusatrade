@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 echo ========================================
-echo   ForexAI Connector Build Script
+echo   NusaTrade Connector Build Script
 echo   Windows VPS Build Automation
 echo ========================================
 echo.
@@ -110,24 +110,24 @@ echo.
 echo ========================================
 
 REM Check if build was successful
-if exist "dist\ForexAI-Connector.exe" (
+if exist "dist\NusaTrade-Connector.exe" (
     echo.
     echo ========================================
     echo   BUILD BERHASIL!
     echo ========================================
     echo.
     echo   File executable:
-    echo   dist\ForexAI-Connector.exe
+    echo   dist\NusaTrade-Connector.exe
     echo.
     echo   Size:
-    for %%A in (dist\ForexAI-Connector.exe) do (
+    for %%A in (dist\NusaTrade-Connector.exe) do (
         set size=%%~zA
         set /a size_mb=!size! / 1048576
         echo   !size! bytes (~!size_mb! MB^)
     )
     echo.
     echo [INFO] Build selesai dengan sukses!
-    echo [INFO] Anda bisa menjalankan: dist\ForexAI-Connector.exe
+    echo [INFO] Anda bisa menjalankan: dist\NusaTrade-Connector.exe
     echo.
 ) else (
     echo.
