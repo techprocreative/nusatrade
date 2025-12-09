@@ -27,6 +27,7 @@ def build():
         f"--distpath={script_dir / 'dist'}",
         f"--workpath={script_dir / 'build'}",
         f"--specpath={script_dir}",
+        f"--paths={src_dir}",  # Add src to search paths
     ]
 
     # Add icon if exists

@@ -7,7 +7,12 @@ import logging
 from pathlib import Path
 
 # Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+if getattr(sys, 'frozen', False):
+    # Running as compiled executable
+    sys.path.insert(0, sys._MEIPASS)
+else:
+    # Running from source
+    sys.path.insert(0, str(Path(__file__).parent))
 
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtGui import QIcon
