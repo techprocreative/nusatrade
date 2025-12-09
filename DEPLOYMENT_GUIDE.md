@@ -21,9 +21,18 @@ Complete guide for deploying Forex AI Platform to production.
 ### Required Accounts & Services
 
 1. **Cloud Platform** (choose one):
-   - Railway.app (recommended for simplicity)
-   - AWS/DigitalOcean/Heroku
-   - Self-hosted VPS
+   - **Render.com** ⭐ **RECOMMENDED** - See [RENDER_DEPLOYMENT.md](./RENDER_DEPLOYMENT.md)
+     - Better pricing ($14/month vs $25-30/month)
+     - Free tier: 750 hours/month
+     - Free PostgreSQL (90 days)
+     - Faster builds
+     - Better developer experience
+   - Railway.app (alternative, more expensive)
+   - AWS/DigitalOcean (for advanced users)
+   - Self-hosted VPS (requires DevOps expertise)
+
+> 💡 **Quick Start**: For fastest deployment, use Render.com. Follow our [detailed Render deployment guide](./RENDER_DEPLOYMENT.md).
+
 
 2. **Database**:
    - PostgreSQL 14+ (Supabase, Railway, AWS RDS)
