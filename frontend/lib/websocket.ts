@@ -1,54 +1,40 @@
-import { io, Socket } from 'socket.io-client';
+// WebSocket stub - disabled for now
+// Backend uses native FastAPI WebSocket at /api/websocket/connector
+// Frontend uses Socket.io which is incompatible
+// TODO: Either migrate backend to Socket.io or frontend to native WebSocket
 
-let socket: Socket | null = null;
+let isConnected = false;
 
-export function getSocket(): Socket {
-  if (!socket) {
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:8000';
-    
-    socket = io(wsUrl, {
-      autoConnect: false,
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      transports: ['websocket', 'polling'],
-    });
-
-    socket.on('connect', () => {
-      console.log('WebSocket connected');
-    });
-
-    socket.on('disconnect', () => {
-      console.log('WebSocket disconnected');
-    });
-
-    socket.on('connect_error', (error) => {
-      console.error('WebSocket connection error:', error);
-    });
-  }
-
-  return socket;
+export function getSocket(): any {
+  return {
+    on: () => { },
+    off: () => { },
+    emit: () => { },
+    connect: () => {
+      console.log('WebSocket disabled - using REST API fallback');
+    },
+    disconnect: () => { },
+    connected: false,
+    auth: {},
+  };
 }
 
 export function connectSocket(token?: string) {
-  const socket = getSocket();
-  
-  if (token) {
-    socket.auth = { token };
-  }
-  
-  socket.connect();
-  return socket;
+  // Disabled - WebSocket not compatible between Socket.io and FastAPI
+  console.log('WebSocket disabled - real-time features will use polling');
+  isConnected = false;
+  return getSocket();
 }
 
 export function disconnectSocket() {
-  if (socket) {
-    socket.disconnect();
-    socket = null;
-  }
+  isConnected = false;
 }
 
-// Event types
+export function isSocketConnected(): boolean {
+  return isConnected;
+}
+
+// Event types (kept for type compatibility)
 export interface PriceUpdate {
   symbol: string;
   bid: number;
