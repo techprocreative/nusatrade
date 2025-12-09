@@ -1,0 +1,124 @@
+{
+  "project_name": "NusaTrade - Forex AI Platform",
+  "description": "AI-powered forex trading platform with ML bots, backtesting, and LLM-based trading supervisor",
+  "tech_stacks": {
+    "backend": {
+      "framework": "FastAPI",
+      "language": "Python 3.12+",
+      "database": "PostgreSQL + SQLAlchemy",
+      "cache": "Redis",
+      "tasks": "Celery",
+      "ml": ["scikit-learn", "pandas", "numpy"],
+      "ai": ["OpenAI GPT-4", "Anthropic Claude"],
+      "security": ["Argon2", "JWT", "pyotp (2FA)"],
+      "monitoring": "Sentry"
+    },
+    "frontend": {
+      "framework": "Next.js 15 (App Router)",
+      "language": "TypeScript",
+      "styling": "TailwindCSS",
+      "ui_library": "shadcn/ui",
+      "state": "React Query",
+      "charts": "TradingView Lightweight Charts",
+      "forms": "React Hook Form + Zod"
+    },
+    "connector": {
+      "framework": "PyQt6",
+      "language": "Python",
+      "mt5_integration": "MetaTrader5 Python library",
+      "websocket": "websocket-client",
+      "build": "PyInstaller"
+    }
+  },
+  "core_features": [
+    {
+      "id": "CF1",
+      "name": "AI Strategy Generation",
+      "description": "Create trading strategies using AI/LLM based on natural language prompts",
+      "api_endpoint": "POST /api/v1/ai/generate-strategy",
+      "components": [
+        "backend/app/api/v1/ai.py - AIStrategyRequest, generate_strategy endpoint",
+        "backend/app/api/v1/strategies.py - Strategy CRUD operations"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "CF2",
+      "name": "Strategy Backtesting",
+      "description": "Test trading strategies with historical data and calculate metrics",
+      "api_endpoint": "POST /api/v1/backtest/run",
+      "components": [
+        "backend/app/api/v1/backtest.py - Backtest engine integration",
+        "backend/app/backtesting/engine.py - BacktestEngine",
+        "backend/app/backtesting/data_manager.py - DataManager (yfinance support)",
+        "backend/app/backtesting/metrics.py - Calculate metrics"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "CF3",
+      "name": "MT5 Connector Integration",
+      "description": "Windows connector app that bridges web platform with MetaTrader 5",
+      "api_endpoint": "WebSocket /connector/ws",
+      "components": [
+        "connector/src/main.py - PyQt6 connector app",
+        "connector/src/core/ - Connection, MT5, WebSocket handlers",
+        "backend/app/api/websocket/connector.py - WebSocket endpoint",
+        "backend/app/api/websocket/connection_manager.py - Manage connections"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "CF4",
+      "name": "AI/ML Bot Deployment",
+      "description": "Train and deploy ML models for automated trading connected to MT5",
+      "api_endpoint": "POST /api/v1/ml/models/{model_id}/activate",
+      "components": [
+        "backend/app/api/v1/ml.py - ML model management",
+        "backend/app/ml/training.py - Model training",
+        "backend/app/ml/features.py - Feature engineering",
+        "backend/app/models/ml.py - MLModel, MLPrediction"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "CF5",
+      "name": "AI LLM Trading Supervision",
+      "description": "AI supervisor that monitors trading, provides analysis, and recommendations",
+      "api_endpoint": "POST /api/v1/ai/chat",
+      "components": [
+        "backend/app/api/v1/ai.py - LLMClient, chat endpoint",
+        "backend/app/api/v1/ai.py - daily_analysis, symbol_analysis, recommendations",
+        "backend/app/models/llm.py - LLMConversation, LLMMessage"
+      ],
+      "status": "implemented"
+    }
+  ],
+  "api_endpoints_summary": {
+    "auth": ["/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/refresh"],
+    "strategies": ["GET/POST /api/v1/strategies", "GET/PUT/DELETE /api/v1/strategies/{id}"],
+    "backtest": ["POST /api/v1/backtest/run", "GET /api/v1/backtest/sessions"],
+    "ml": ["GET/POST /api/v1/ml/models", "POST /api/v1/ml/models/{id}/train", "POST /api/v1/ml/models/{id}/predict", "POST /api/v1/ml/models/{id}/activate"],
+    "ai": ["POST /api/v1/ai/chat", "POST /api/v1/ai/generate-strategy", "GET /api/v1/ai/analysis/daily", "GET /api/v1/ai/recommendations"],
+    "trading": ["GET /api/v1/trading/positions", "POST /api/v1/trading/orders"],
+    "connector_websocket": ["WS /connector/ws", "WS /connector/client"]
+  },
+  "existing_tests": {
+    "backend": [
+      "tests/test_ai.py - AI/LLM endpoint tests",
+      "tests/test_backtest.py - Backtesting tests",
+      "tests/test_ml.py - ML model tests",
+      "tests/test_trading.py - Trading endpoint tests",
+      "tests/test_auth.py - Authentication tests"
+    ],
+    "connector": [
+      "tests/test_placeholder.py - Placeholder"
+    ]
+  },
+  "architecture": {
+    "frontend": "Next.js 15 (App Router) - React, TypeScript, TailwindCSS",
+    "backend": "FastAPI - Python, SQLAlchemy, PostgreSQL, Redis",
+    "connector": "PyQt6 Desktop App - Connects to MT5 via MetaTrader5 library",
+    "communication": "REST API + WebSocket for real-time updates"
+  }
+}

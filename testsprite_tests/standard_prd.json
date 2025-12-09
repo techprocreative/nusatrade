@@ -1,0 +1,239 @@
+{
+  "project_name": "NusaTrade - Forex AI Platform",
+  "version": "1.0.0",
+  "description": "AI-powered forex trading platform with ML bots, backtesting, and LLM-based trading supervisor",
+  "features": [
+    {
+      "id": "CF1",
+      "name": "AI Strategy Generation",
+      "description": "Create trading strategies using AI/LLM based on natural language prompts",
+      "priority": "high",
+      "acceptance_criteria": [
+        "User can submit a natural language description of a trading strategy",
+        "System generates a complete strategy with entry/exit rules, indicators, and risk management",
+        "Generated strategy includes code, parameters, and explanations",
+        "Response includes warnings and suggested improvements"
+      ],
+      "api_endpoints": [
+        {
+          "method": "POST",
+          "path": "/api/v1/ai/generate-strategy",
+          "description": "Generate trading strategy from natural language prompt",
+          "request_body": {
+            "prompt": "string",
+            "symbol": "string",
+            "timeframe": "string",
+            "risk_profile": "string",
+            "preferred_indicators": "array"
+          },
+          "response": {
+            "strategy": "object",
+            "explanation": "string",
+            "warnings": "array",
+            "suggested_improvements": "array"
+          }
+        }
+      ]
+    },
+    {
+      "id": "CF2",
+      "name": "Strategy Backtesting",
+      "description": "Test trading strategies with historical market data and calculate performance metrics",
+      "priority": "high",
+      "acceptance_criteria": [
+        "User can run backtest on any strategy with specified date range",
+        "System calculates key metrics (net profit, win rate, Sharpe ratio, etc.)",
+        "Equity curve and trade history are returned",
+        "Data can be loaded from yfinance or database cache"
+      ],
+      "api_endpoints": [
+        {
+          "method": "POST",
+          "path": "/api/v1/backtest/run",
+          "description": "Run backtest on a strategy",
+          "request_body": {
+            "strategy_id": "string",
+            "symbol": "string",
+            "timeframe": "string",
+            "start_date": "string",
+            "end_date": "string",
+            "initial_balance": "number",
+            "commission": "number",
+            "slippage": "number"
+          },
+          "response": {
+            "session_id": "string",
+            "status": "string",
+            "net_profit": "number",
+            "total_trades": "number",
+            "win_rate": "number",
+            "profit_factor": "number",
+            "max_drawdown_pct": "number",
+            "sharpe_ratio": "number"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/backtest/sessions",
+          "description": "List backtest sessions"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/backtest/sessions/{session_id}",
+          "description": "Get specific backtest session details"
+        }
+      ]
+    },
+    {
+      "id": "CF3",
+      "name": "MT5 Connector Integration",
+      "description": "Connect Windows connector app with the platform via WebSocket for MetaTrader 5 trading",
+      "priority": "high",
+      "acceptance_criteria": [
+        "Connector app can authenticate with JWT token",
+        "WebSocket connection is established and maintained",
+        "Connection status is tracked and visible",
+        "Trade commands can be sent from dashboard to connector",
+        "Real-time updates are pushed to dashboard clients"
+      ],
+      "api_endpoints": [
+        {
+          "method": "WS",
+          "path": "/connector/ws",
+          "description": "WebSocket endpoint for connector apps"
+        },
+        {
+          "method": "WS",
+          "path": "/connector/client",
+          "description": "WebSocket endpoint for dashboard clients"
+        }
+      ]
+    },
+    {
+      "id": "CF4",
+      "name": "AI/ML Bot Deployment",
+      "description": "Train and deploy ML models for automated trading connected to MT5",
+      "priority": "high",
+      "acceptance_criteria": [
+        "User can create ML model configurations",
+        "Model training can be initiated",
+        "Trained models can generate predictions",
+        "Models can be activated/deactivated for live trading",
+        "Performance metrics are tracked"
+      ],
+      "api_endpoints": [
+        {
+          "method": "GET",
+          "path": "/api/v1/ml/models",
+          "description": "List ML models"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/ml/models",
+          "description": "Create ML model configuration",
+          "request_body": {
+            "name": "string",
+            "model_type": "string",
+            "symbol": "string",
+            "timeframe": "string",
+            "config": "object"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/ml/models/{model_id}/train",
+          "description": "Train a model"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/ml/models/{model_id}/predict",
+          "description": "Generate prediction",
+          "request_body": {
+            "symbol": "string",
+            "features": "object"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/ml/models/{model_id}/activate",
+          "description": "Activate model for live trading"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/ml/models/{model_id}/deactivate",
+          "description": "Deactivate model from live trading"
+        }
+      ]
+    },
+    {
+      "id": "CF5",
+      "name": "AI LLM Trading Supervision",
+      "description": "AI supervisor monitors trading, provides analysis and recommendations",
+      "priority": "high",
+      "acceptance_criteria": [
+        "User can chat with AI about trading",
+        "AI provides daily market analysis",
+        "AI can analyze specific symbols",
+        "AI gives trading recommendations",
+        "Conversation history is maintained"
+      ],
+      "api_endpoints": [
+        {
+          "method": "POST",
+          "path": "/api/v1/ai/chat",
+          "description": "Chat with AI supervisor",
+          "request_body": {
+            "message": "string",
+            "conversation_id": "string",
+            "context_type": "string"
+          },
+          "response": {
+            "reply": "string",
+            "conversation_id": "string",
+            "tokens_used": "number"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/ai/conversations",
+          "description": "List user conversations"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/ai/analysis/daily",
+          "description": "Get daily market analysis"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/ai/analysis/{symbol}",
+          "description": "Get symbol-specific analysis"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/ai/recommendations",
+          "description": "Get trading recommendations"
+        }
+      ]
+    }
+  ],
+  "authentication": {
+    "type": "JWT",
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "description": "User login"
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/auth/register",
+        "description": "User registration"
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/auth/refresh",
+        "description": "Refresh access token"
+      }
+    ]
+  }
+}

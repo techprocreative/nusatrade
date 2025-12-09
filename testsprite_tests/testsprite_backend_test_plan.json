@@ -1,0 +1,52 @@
+[
+  {
+    "id": "TC001",
+    "title": "post api v1 ai generate strategy",
+    "description": "Test the generation of trading strategy from a natural language prompt including validation of strategy object, explanation, warnings, and suggested improvements in the response."
+  },
+  {
+    "id": "TC002",
+    "title": "post api v1 backtest run",
+    "description": "Verify running a backtest on a strategy with specified parameters and validate the returned performance metrics such as net profit, win rate, sharpe ratio, and session status."
+  },
+  {
+    "id": "TC003",
+    "title": "get api v1 backtest sessions",
+    "description": "Test listing all backtest sessions ensuring the response includes all sessions with correct metadata."
+  },
+  {
+    "id": "TC004",
+    "title": "get api v1 backtest sessions session id",
+    "description": "Validate retrieval of specific backtest session details by session_id and verify the correctness of returned data."
+  },
+  {
+    "id": "TC005",
+    "title": "ws connector ws",
+    "description": "Test establishing and maintaining a WebSocket connection for connector apps including authentication with JWT token and connection status tracking."
+  },
+  {
+    "id": "TC006",
+    "title": "ws connector client",
+    "description": "Verify WebSocket connection for dashboard clients and ensure real-time updates are pushed correctly."
+  },
+  {
+    "id": "TC007",
+    "title": "get api v1 ml models",
+    "description": "Test listing all ML models and verify the response contains correct model configurations."
+  },
+  {
+    "id": "TC008",
+    "title": "post api v1 ml models",
+    "description": "Validate creation of ML model configuration with required fields and ensure the model is stored correctly."
+  },
+  {
+    "id": "TC009",
+    "title": "post api v1 ml models model id train",
+    "description": "Test initiating training of a specified ML model and verify training status and progress."
+  },
+  {
+    "id": "TC010",
+    "title": "post api v1 ai chat",
+    "description": "Test chatting with AI supervisor by sending messages and validate the reply, conversation id, and tokens used in the response."
+  }
+]

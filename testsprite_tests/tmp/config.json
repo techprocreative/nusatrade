@@ -1,0 +1,23 @@
+{
+  "status": "commited",
+  "type": "backend",
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:8000/api/v1",
+  "backendAuthType": "public",
+  "executionArgs": {
+    "projectName": "nusatrade",
+    "projectPath": "/media/d88k/01D9C5CA3CB3C3E0/edo/nusatrade",
+    "testIds": [
+      "TC001",
+      "TC002",
+      "TC007",
+      "TC008",
+      "TC010"
+    ],
+    "additionalInstruction": "Focus on verifying the 5 core functions: 1) AI Strategy Generation (TC001), 2) Backtesting (TC002), 3) ML Models (TC007, TC008), 4) AI Chat/Supervision (TC010). For authentication, use test user credentials and ensure JWT tokens are properly handled.",
+    "envs": {
+      "API_KEY": "sk-user-skUtBXti28JQ-bXnY7kCOXpcUafwE2DgfAe0RDNAR4JkPd6gNXS4hb_dlSDz6kNrtOwjVMdRyc9V-RrpIXseCN3E9MUlK9kwtQiX4a_DVKtL4BPgTZ_F1KAOuog4uccu1Lo"
+    }
+  },
+  "proxy": "http://d43cb199-fcc6-4ce9-8336-281e644d3086:QlgnnzWauqh0dUAIBprFTOIMvowdXBT0@tun.testsprite.com:8080"
+}

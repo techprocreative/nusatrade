@@ -26,6 +26,7 @@ export function useConnections() {
       const response = await apiClient.get('/api/v1/brokers/connections');
       return response.data;
     },
+    refetchInterval: 5000, // Auto-refresh every 5 seconds for live status
   });
 }
 

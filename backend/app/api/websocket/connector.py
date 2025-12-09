@@ -1,6 +1,7 @@
 """WebSocket endpoint for MT5 connector apps."""
 
 import json
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.core.logging import get_logger
 from app.api import deps
+from app.core.database import SessionLocal
 from app.models.user import User
 from app.models.broker import BrokerConnection
 from app.api.websocket.connection_manager import connection_manager
@@ -19,6 +21,26 @@ from app.api.websocket.connection_manager import connection_manager
 router = APIRouter()
 logger = get_logger(__name__)
 settings = get_settings()
+
+
+def update_connection_status(connection_id: str, is_active: bool):
+    """Update broker connection status in database."""
+    db = SessionLocal()
+    try:
+        conn = db.query(BrokerConnection).filter(
+            BrokerConnection.id == UUID(connection_id)
+        ).first()
+        if conn:
+            conn.is_active = is_active
+            if is_active:
+                conn.last_connected_at = datetime.utcnow()
+            db.commit()
+            logger.info(f"Updated connection {connection_id} is_active={is_active}")
+    except Exception as e:
+        logger.error(f"Failed to update connection status: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
 
 async def verify_token(token: str) -> Optional[dict]:
@@ -93,6 +115,9 @@ async def connector_ws(
             user_id=user_id,
             connection_id=connection_id,
         )
+        
+        # Update database - mark as active
+        update_connection_status(connection_id, is_active=True)
 
         # Message loop
         while True:
@@ -112,6 +137,8 @@ async def connector_ws(
     except Exception as e:
         logger.error(f"Connector {connection_id} error: {e}")
     finally:
+        # Update database - mark as inactive
+        update_connection_status(connection_id, is_active=False)
         await connection_manager.disconnect_connector(connection_id)
 
 

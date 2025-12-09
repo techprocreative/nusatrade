@@ -8,10 +8,11 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QTextEdit, QLineEdit, QSpinBox,
     QGroupBox, QFormLayout, QTabWidget, QStatusBar,
-    QMessageBox, QCheckBox, QComboBox, QFrame
+    QMessageBox, QCheckBox, QComboBox, QFrame, QSpacerItem,
+    QSizePolicy
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
-from PyQt6.QtGui import QColor, QPalette, QFont
+from PyQt6.QtGui import QFont
 
 from core.mt5_service import MT5Service
 from core.ws_service import WebSocketService, ConnectionState, MessageHandler
@@ -36,12 +37,96 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.auth = auth_service
         
-        # Set window title with user email
         title = "NusaTrade Connector"
         if self.auth and self.auth.is_authenticated():
             title += f" - {self.auth.get_user_email()}"
         self.setWindowTitle(title)
-        self.setMinimumSize(700, 550)
+        self.setMinimumSize(720, 580)
+        
+        # Dark theme
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #1a1a2e;
+            }
+            QWidget {
+                background-color: #1a1a2e;
+                color: #ffffff;
+            }
+            QTabWidget::pane {
+                border: 1px solid #3a3a5a;
+                border-radius: 8px;
+                background-color: #16213e;
+            }
+            QTabBar::tab {
+                background-color: #16213e;
+                color: #7f8c8d;
+                padding: 10px 20px;
+                margin-right: 4px;
+                border-top-left-radius: 6px;
+                border-top-right-radius: 6px;
+            }
+            QTabBar::tab:selected {
+                background-color: #1a1a2e;
+                color: #4fc3f7;
+                border-bottom: 2px solid #4fc3f7;
+            }
+            QGroupBox {
+                font-weight: bold;
+                font-size: 13px;
+                border: 2px solid #3a3a5a;
+                border-radius: 8px;
+                margin-top: 12px;
+                padding-top: 8px;
+                background-color: #16213e;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 16px;
+                padding: 0 8px;
+                color: #4fc3f7;
+            }
+            QLineEdit, QSpinBox {
+                background-color: #1a1a2e;
+                border: 2px solid #3a3a5a;
+                border-radius: 6px;
+                padding: 8px 12px;
+                color: #ffffff;
+                font-size: 13px;
+                min-height: 20px;
+            }
+            QLineEdit:focus, QSpinBox:focus {
+                border-color: #4fc3f7;
+            }
+            QTextEdit {
+                background-color: #1a1a2e;
+                border: 2px solid #3a3a5a;
+                border-radius: 6px;
+                color: #ffffff;
+            }
+            QComboBox {
+                background-color: #1a1a2e;
+                border: 2px solid #3a3a5a;
+                border-radius: 6px;
+                padding: 8px 12px;
+                color: #ffffff;
+                min-height: 20px;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #16213e;
+                color: #ffffff;
+                selection-background-color: #4fc3f7;
+            }
+            QCheckBox {
+                color: #b0b0b0;
+            }
+            QStatusBar {
+                background-color: #16213e;
+                color: #7f8c8d;
+            }
+        """)
 
         # Services
         self.config_manager = ConfigManager()
@@ -49,11 +134,9 @@ class MainWindow(QMainWindow):
         self.mt5 = MT5Service()
         self.ws: Optional[WebSocketService] = None
         self.message_handler: Optional[MessageHandler] = None
-        
-        # Current broker connection ID (from backend)
         self.current_connection_id: Optional[str] = None
 
-        # Signal bridge for thread-safe updates
+        # Signal bridge
         self.signals = SignalBridge()
         self.signals.state_changed.connect(self._on_state_changed)
         self.signals.message_received.connect(self._on_message_received)
@@ -68,10 +151,10 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
 
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setSpacing(15)
+        main_layout.setSpacing(16)
         main_layout.setContentsMargins(20, 20, 20, 20)
 
-        # Header with status
+        # Header
         header = self._create_header()
         main_layout.addLayout(header)
 
@@ -91,24 +174,26 @@ class MainWindow(QMainWindow):
     def _create_header(self) -> QHBoxLayout:
         """Create header with connection status."""
         layout = QHBoxLayout()
+        layout.setSpacing(16)
 
-        # Connection status indicators
+        # Status indicators
         status_frame = QFrame()
         status_frame.setStyleSheet("""
             QFrame {
-                background-color: #2a2a2a;
+                background-color: #16213e;
                 border-radius: 8px;
-                padding: 10px;
+                padding: 8px;
             }
         """)
         status_layout = QHBoxLayout(status_frame)
-        status_layout.setSpacing(20)
+        status_layout.setSpacing(24)
+        status_layout.setContentsMargins(16, 10, 16, 10)
 
         self.mt5_status = QLabel("MT5: ⚫ Disconnected")
         self.ws_status = QLabel("Server: ⚫ Disconnected")
         
-        self.mt5_status.setStyleSheet("font-weight: bold; font-size: 13px;")
-        self.ws_status.setStyleSheet("font-weight: bold; font-size: 13px;")
+        for label in [self.mt5_status, self.ws_status]:
+            label.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
 
         status_layout.addWidget(self.mt5_status)
         status_layout.addWidget(self.ws_status)
@@ -116,40 +201,41 @@ class MainWindow(QMainWindow):
         layout.addWidget(status_frame)
         layout.addStretch()
 
-        # Connect/Disconnect buttons
+        # Buttons
         self.connect_btn = QPushButton("Connect")
-        self.connect_btn.setMinimumSize(120, 40)
+        self.connect_btn.setMinimumSize(130, 44)
+        self.connect_btn.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        self.connect_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.connect_btn.setStyleSheet("""
             QPushButton {
-                background-color: #4CAF50;
+                background-color: #27ae60;
                 color: white;
-                padding: 10px 25px;
+                border: none;
                 border-radius: 6px;
-                font-weight: bold;
-                font-size: 13px;
             }
             QPushButton:hover {
-                background-color: #43A047;
+                background-color: #2ecc71;
             }
             QPushButton:disabled {
-                background-color: #555555;
+                background-color: #3a3a5a;
+                color: #6a6a8a;
             }
         """)
         self.connect_btn.clicked.connect(self._connect)
 
         self.disconnect_btn = QPushButton("Disconnect")
-        self.disconnect_btn.setMinimumSize(120, 40)
+        self.disconnect_btn.setMinimumSize(130, 44)
+        self.disconnect_btn.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        self.disconnect_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.disconnect_btn.setStyleSheet("""
             QPushButton {
-                background-color: #f44336;
+                background-color: #e74c3c;
                 color: white;
-                padding: 10px 25px;
+                border: none;
                 border-radius: 6px;
-                font-weight: bold;
-                font-size: 13px;
             }
             QPushButton:hover {
-                background-color: #d32f2f;
+                background-color: #c0392b;
             }
         """)
         self.disconnect_btn.clicked.connect(self._disconnect)
@@ -164,125 +250,83 @@ class MainWindow(QMainWindow):
         """Create connection configuration tab."""
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        layout.setSpacing(20)
+        layout.setSpacing(16)
+        layout.setContentsMargins(16, 16, 16, 16)
 
         # MT5 Configuration
         mt5_group = QGroupBox("MetaTrader 5 Credentials")
-        mt5_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                font-size: 14px;
-                border: 2px solid #444;
-                border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 15px;
-                padding: 0 10px;
-            }
-        """)
         mt5_layout = QFormLayout()
         mt5_layout.setSpacing(12)
-        mt5_layout.setContentsMargins(20, 25, 20, 20)
+        mt5_layout.setContentsMargins(20, 24, 20, 20)
+        mt5_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
-        # MT5 Login
         self.mt5_login = QSpinBox()
         self.mt5_login.setMaximum(999999999)
         self.mt5_login.setValue(self.config.mt5.login)
-        self.mt5_login.setMinimumHeight(40)
-        self.mt5_login.setFont(QFont("Arial", 12))
-        self.mt5_login.setStyleSheet(self._input_style())
+        self.mt5_login.setFont(QFont("Segoe UI", 12))
 
-        # MT5 Password
         self.mt5_password = QLineEdit()
         self.mt5_password.setEchoMode(QLineEdit.EchoMode.Password)
         self.mt5_password.setText(self.config.mt5.password)
-        self.mt5_password.setMinimumHeight(40)
-        self.mt5_password.setFont(QFont("Arial", 12))
-        self.mt5_password.setStyleSheet(self._input_style())
+        self.mt5_password.setFont(QFont("Segoe UI", 12))
         self.mt5_password.setPlaceholderText("MT5 Password")
 
-        # MT5 Server
         self.mt5_server = QLineEdit()
         self.mt5_server.setText(self.config.mt5.server)
-        self.mt5_server.setMinimumHeight(40)
-        self.mt5_server.setFont(QFont("Arial", 12))
-        self.mt5_server.setStyleSheet(self._input_style())
+        self.mt5_server.setFont(QFont("Segoe UI", 12))
         self.mt5_server.setPlaceholderText("e.g., ICMarketsSC-Demo")
 
-        label_style = "font-size: 13px; color: #aaa;"
+        label_font = QFont("Segoe UI", 11)
         
         login_label = QLabel("Login:")
-        login_label.setStyleSheet(label_style)
+        login_label.setFont(label_font)
         mt5_layout.addRow(login_label, self.mt5_login)
         
         pass_label = QLabel("Password:")
-        pass_label.setStyleSheet(label_style)
+        pass_label.setFont(label_font)
         mt5_layout.addRow(pass_label, self.mt5_password)
         
         server_label = QLabel("Server:")
-        server_label.setStyleSheet(label_style)
+        server_label.setFont(label_font)
         mt5_layout.addRow(server_label, self.mt5_server)
         
         mt5_group.setLayout(mt5_layout)
 
-        # Detected Info (shown after connection)
+        # Detected Info
         self.detected_group = QGroupBox("Detected Information")
         self.detected_group.setStyleSheet("""
             QGroupBox {
-                font-weight: bold;
-                font-size: 14px;
-                border: 2px solid #4CAF50;
-                border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 10px;
+                border-color: #27ae60;
             }
             QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 15px;
-                padding: 0 10px;
-                color: #4CAF50;
+                color: #27ae60;
             }
         """)
         detected_layout = QFormLayout()
         detected_layout.setSpacing(10)
-        detected_layout.setContentsMargins(20, 25, 20, 20)
+        detected_layout.setContentsMargins(20, 24, 20, 20)
+        detected_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
         self.detected_broker = QLabel("—")
         self.detected_account = QLabel("—")
         self.detected_server = QLabel("—")
         
         for label in [self.detected_broker, self.detected_account, self.detected_server]:
-            label.setStyleSheet("font-size: 13px; color: #4CAF50;")
+            label.setFont(QFont("Segoe UI", 11))
+            label.setStyleSheet("color: #2ecc71;")
 
         detected_layout.addRow(QLabel("Broker:"), self.detected_broker)
         detected_layout.addRow(QLabel("Account:"), self.detected_account)
         detected_layout.addRow(QLabel("Server:"), self.detected_server)
         self.detected_group.setLayout(detected_layout)
-        self.detected_group.hide()  # Hidden until connected
+        self.detected_group.hide()
 
-        # Account info display
+        # Account info
         account_group = QGroupBox("Account Information")
-        account_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                font-size: 14px;
-                border: 2px solid #444;
-                border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 15px;
-                padding: 0 10px;
-            }
-        """)
         account_layout = QFormLayout()
         account_layout.setSpacing(10)
-        account_layout.setContentsMargins(20, 25, 20, 20)
+        account_layout.setContentsMargins(20, 24, 20, 20)
+        account_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
         self.account_balance = QLabel("—")
         self.account_equity = QLabel("—")
@@ -290,7 +334,7 @@ class MainWindow(QMainWindow):
         self.account_profit = QLabel("—")
 
         for label in [self.account_balance, self.account_equity, self.account_margin, self.account_profit]:
-            label.setStyleSheet("font-size: 13px;")
+            label.setFont(QFont("Segoe UI", 11))
 
         account_layout.addRow(QLabel("Balance:"), self.account_balance)
         account_layout.addRow(QLabel("Equity:"), self.account_equity)
@@ -305,36 +349,36 @@ class MainWindow(QMainWindow):
 
         return widget
 
-    def _input_style(self) -> str:
-        return """
-            QLineEdit, QSpinBox {
-                background-color: #3a3a3a;
-                border: 2px solid #555;
-                border-radius: 6px;
-                padding: 8px 12px;
-                color: white;
-                font-size: 13px;
-            }
-            QLineEdit:focus, QSpinBox:focus {
-                border-color: #2196F3;
-            }
-        """
-
     def _create_trading_tab(self) -> QWidget:
         """Create trading/positions tab."""
         widget = QWidget()
         layout = QVBoxLayout(widget)
+        layout.setContentsMargins(16, 16, 16, 16)
 
-        # Open positions
         positions_group = QGroupBox("Open Positions")
         positions_layout = QVBoxLayout()
+        positions_layout.setContentsMargins(16, 24, 16, 16)
 
         self.positions_text = QTextEdit()
         self.positions_text.setReadOnly(True)
         self.positions_text.setPlaceholderText("No open positions")
         self.positions_text.setFont(QFont("Consolas", 11))
+        self.positions_text.setMinimumHeight(200)
 
         refresh_btn = QPushButton("Refresh Positions")
+        refresh_btn.setMinimumHeight(40)
+        refresh_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+        """)
         refresh_btn.clicked.connect(self._refresh_positions)
 
         positions_layout.addWidget(self.positions_text)
@@ -349,66 +393,74 @@ class MainWindow(QMainWindow):
         """Create settings tab."""
         widget = QWidget()
         layout = QVBoxLayout(widget)
+        layout.setContentsMargins(16, 16, 16, 16)
 
         settings_group = QGroupBox("Application Settings")
         settings_layout = QFormLayout()
-        settings_layout.setSpacing(15)
-        settings_layout.setContentsMargins(20, 25, 20, 20)
+        settings_layout.setSpacing(16)
+        settings_layout.setContentsMargins(20, 24, 20, 20)
 
         self.auto_connect = QCheckBox("Auto-connect on startup")
         self.auto_connect.setChecked(self.config.auto_connect)
+        self.auto_connect.setFont(QFont("Segoe UI", 11))
 
         self.heartbeat_interval = QSpinBox()
         self.heartbeat_interval.setRange(10, 120)
         self.heartbeat_interval.setValue(self.config.heartbeat_interval)
         self.heartbeat_interval.setSuffix(" seconds")
-        self.heartbeat_interval.setMinimumHeight(35)
+        self.heartbeat_interval.setFont(QFont("Segoe UI", 11))
 
         self.log_level = QComboBox()
         self.log_level.addItems(["DEBUG", "INFO", "WARNING", "ERROR"])
         self.log_level.setCurrentText(self.config.log_level)
-        self.log_level.setMinimumHeight(35)
+        self.log_level.setFont(QFont("Segoe UI", 11))
 
         settings_layout.addRow("", self.auto_connect)
-        settings_layout.addRow("Heartbeat Interval:", self.heartbeat_interval)
+        settings_layout.addRow("Heartbeat:", self.heartbeat_interval)
         settings_layout.addRow("Log Level:", self.log_level)
         settings_group.setLayout(settings_layout)
 
-        # Logout button
-        logout_btn = QPushButton("Logout")
-        logout_btn.setStyleSheet("""
+        # Buttons
+        btn_layout = QHBoxLayout()
+        
+        save_btn = QPushButton("Save Settings")
+        save_btn.setMinimumHeight(44)
+        save_btn.setStyleSheet("""
             QPushButton {
-                background-color: #ff9800;
+                background-color: #27ae60;
                 color: white;
-                padding: 12px;
+                border: none;
                 border-radius: 6px;
                 font-weight: bold;
             }
             QPushButton:hover {
-                background-color: #f57c00;
+                background-color: #2ecc71;
+            }
+        """)
+        save_btn.clicked.connect(self._save_settings)
+
+        logout_btn = QPushButton("Logout")
+        logout_btn.setMinimumHeight(44)
+        logout_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #e67e22;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #d35400;
             }
         """)
         logout_btn.clicked.connect(self._logout)
 
-        save_btn = QPushButton("Save Settings")
-        save_btn.clicked.connect(self._save_settings)
-        save_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #4CAF50;
-                color: white;
-                padding: 12px;
-                border-radius: 6px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #43A047;
-            }
-        """)
+        btn_layout.addWidget(save_btn)
+        btn_layout.addWidget(logout_btn)
 
         layout.addWidget(settings_group)
-        layout.addWidget(save_btn)
+        layout.addLayout(btn_layout)
         layout.addStretch()
-        layout.addWidget(logout_btn)
 
         return widget
 
@@ -416,12 +468,25 @@ class MainWindow(QMainWindow):
         """Create logs tab."""
         widget = QWidget()
         layout = QVBoxLayout(widget)
+        layout.setContentsMargins(16, 16, 16, 16)
 
         self.log_view = QTextEdit()
         self.log_view.setReadOnly(True)
         self.log_view.setFont(QFont("Consolas", 10))
 
         clear_btn = QPushButton("Clear Logs")
+        clear_btn.setMinimumHeight(40)
+        clear_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #7f8c8d;
+                color: white;
+                border: none;
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background-color: #95a5a6;
+            }
+        """)
         clear_btn.clicked.connect(self.log_view.clear)
 
         layout.addWidget(self.log_view)
@@ -441,7 +506,7 @@ class MainWindow(QMainWindow):
         self.connect_btn.setEnabled(False)
         self.connect_btn.setText("Connecting...")
 
-        # Update config from UI
+        # Update config
         self.config.mt5.login = self.mt5_login.value()
         self.config.mt5.password = self.mt5_password.text()
         self.config.mt5.server = self.mt5_server.text()
@@ -456,9 +521,10 @@ class MainWindow(QMainWindow):
 
             if mt5_connected:
                 self.mt5_status.setText("MT5: 🟢 Connected")
+                self.mt5_status.setStyleSheet("color: #2ecc71; font-weight: bold;")
                 self._log("MT5 connected successfully", "INFO")
                 
-                # Auto-detect broker info
+                # Auto-detect
                 account_info = self.mt5.get_account_info()
                 if account_info:
                     self.detected_broker.setText(account_info.company)
@@ -467,14 +533,13 @@ class MainWindow(QMainWindow):
                     self.detected_group.show()
                     
                     self._log(f"Detected: {account_info.company} - {account_info.login}", "INFO")
-                    
-                    # Auto-register broker connection
                     self._register_broker_connection(account_info)
                 
                 self._update_account_info()
                 self.account_timer.start()
             else:
                 self.mt5_status.setText("MT5: 🔴 Failed")
+                self.mt5_status.setStyleSheet("color: #e74c3c; font-weight: bold;")
                 self._log("MT5 connection failed - check credentials", "ERROR")
                 self.connect_btn.setEnabled(True)
                 self.connect_btn.setText("Connect")
@@ -487,19 +552,20 @@ class MainWindow(QMainWindow):
             self.connect_btn.setText("Connect")
             return
 
-        # Connect to WebSocket server (using auth service)
+        # Connect WebSocket
         try:
             if self.auth and self.auth.is_authenticated():
                 ws_url = self.auth.get_ws_url()
                 ws_token = self.auth.get_access_token()
                 
-                # Add connection_id to URL if we have one
                 if self.current_connection_id:
-                    ws_url = f"{ws_url}?connection_id={self.current_connection_id}"
+                    ws_url = f"{ws_url}?token={ws_token}&connection_id={self.current_connection_id}"
+                else:
+                    ws_url = f"{ws_url}?token={ws_token}"
                 
                 self._log(f"Connecting to server...", "INFO")
             else:
-                self._log("Not authenticated - please restart and login", "ERROR")
+                self._log("Not authenticated", "ERROR")
                 return
 
             self.ws = WebSocketService(
@@ -530,7 +596,7 @@ class MainWindow(QMainWindow):
         self.disconnect_btn.setEnabled(True)
 
     def _register_broker_connection(self, account_info):
-        """Register or update broker connection in backend."""
+        """Register broker connection in backend."""
         if not self.auth or not self.auth.is_authenticated():
             return
             
@@ -541,7 +607,6 @@ class MainWindow(QMainWindow):
             token = self.auth.get_access_token()
             headers = {"Authorization": f"Bearer {token}"}
             
-            # Check existing connections
             resp = requests.get(
                 f"{server_url}/api/v1/brokers/connections",
                 headers=headers,
@@ -551,15 +616,13 @@ class MainWindow(QMainWindow):
             if resp.status_code == 200:
                 connections = resp.json()
                 
-                # Find matching connection
                 for conn in connections:
                     if (conn.get("account_number") == str(account_info.login) and
                         conn.get("server") == account_info.server):
                         self.current_connection_id = conn["id"]
-                        self._log(f"Using existing connection: {conn['id'][:8]}...", "INFO")
+                        self._log(f"Using existing connection", "INFO")
                         return
                 
-                # Create new connection
                 resp = requests.post(
                     f"{server_url}/api/v1/brokers/connections",
                     headers=headers,
@@ -574,9 +637,7 @@ class MainWindow(QMainWindow):
                 if resp.status_code == 201:
                     data = resp.json()
                     self.current_connection_id = data["id"]
-                    self._log(f"Registered new connection: {data['id'][:8]}...", "INFO")
-                else:
-                    self._log(f"Failed to register connection: {resp.status_code}", "WARNING")
+                    self._log(f"Registered new connection", "INFO")
                     
         except Exception as e:
             self._log(f"Connection registration error: {e}", "WARNING")
@@ -591,7 +652,9 @@ class MainWindow(QMainWindow):
         self.account_timer.stop()
 
         self.mt5_status.setText("MT5: ⚫ Disconnected")
+        self.mt5_status.setStyleSheet("color: #7f8c8d; font-weight: bold;")
         self.ws_status.setText("Server: ⚫ Disconnected")
+        self.ws_status.setStyleSheet("color: #7f8c8d; font-weight: bold;")
         self.detected_group.hide()
 
         self.connect_btn.setEnabled(True)
@@ -603,8 +666,7 @@ class MainWindow(QMainWindow):
     def _logout(self):
         """Logout and close application."""
         reply = QMessageBox.question(
-            self,
-            "Logout",
+            self, "Logout",
             "Are you sure you want to logout?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
@@ -614,8 +676,6 @@ class MainWindow(QMainWindow):
             if self.auth:
                 self.auth.logout()
             self.close()
-            # Restart application to show login
-            import sys
             from PyQt6.QtWidgets import QApplication
             QApplication.quit()
 
@@ -628,8 +688,17 @@ class MainWindow(QMainWindow):
             "disconnected": "⚫",
             "error": "🔴",
         }
+        colors = {
+            "connected": "#2ecc71",
+            "connecting": "#f1c40f",
+            "reconnecting": "#f1c40f",
+            "disconnected": "#7f8c8d",
+            "error": "#e74c3c",
+        }
         icon = icons.get(state, "⚫")
+        color = colors.get(state, "#7f8c8d")
         self.ws_status.setText(f"Server: {icon} {state.capitalize()}")
+        self.ws_status.setStyleSheet(f"color: {color}; font-weight: bold;")
         self._log(f"Server: {state}", "INFO")
 
     def _on_message_received(self, msg_type: str):
@@ -644,9 +713,10 @@ class MainWindow(QMainWindow):
             self.account_equity.setText(f"${account.equity:,.2f}")
             self.account_margin.setText(f"${account.free_margin:,.2f}")
             
-            profit_color = "#4CAF50" if account.profit >= 0 else "#f44336"
-            self.account_profit.setText(f"${account.profit:,.2f}")
-            self.account_profit.setStyleSheet(f"color: {profit_color}; font-size: 13px;")
+            profit_color = "#2ecc71" if account.profit >= 0 else "#e74c3c"
+            profit_sign = "+" if account.profit >= 0 else ""
+            self.account_profit.setText(f"{profit_sign}${account.profit:,.2f}")
+            self.account_profit.setStyleSheet(f"color: {profit_color};")
 
     def _refresh_positions(self):
         """Refresh open positions display."""
@@ -676,12 +746,12 @@ class MainWindow(QMainWindow):
         """Add message to log view."""
         timestamp = datetime.now().strftime("%H:%M:%S")
         colors = {
-            "DEBUG": "#888888",
-            "INFO": "#ffffff",
-            "WARNING": "#ff9800",
-            "ERROR": "#f44336",
+            "DEBUG": "#7f8c8d",
+            "INFO": "#ecf0f1",
+            "WARNING": "#f39c12",
+            "ERROR": "#e74c3c",
         }
-        color = colors.get(level, "#ffffff")
+        color = colors.get(level, "#ecf0f1")
         html = f'<span style="color: {color}">[{timestamp}] [{level}] {message}</span>'
         self.log_view.append(html)
 
