@@ -16,9 +16,10 @@ interface Settings {
   tradeAlerts: boolean;
   dailySummary: boolean;
 
-  // API Keys
-  openaiKey: string;
-  anthropicKey: string;
+  // AI Provider (OpenAI Compatible)
+  llmApiKey: string;
+  llmBaseUrl: string;
+  llmModel: string;
 
   // Display
   theme: string;
@@ -37,8 +38,9 @@ export default function SettingsPage() {
     emailNotifications: true,
     tradeAlerts: true,
     dailySummary: false,
-    openaiKey: "",
-    anthropicKey: "",
+    llmApiKey: "",
+    llmBaseUrl: "",
+    llmModel: "gpt-4-turbo-preview",
     theme: "dark",
     timezone: "Asia/Jakarta",
     language: "en",
@@ -53,7 +55,7 @@ export default function SettingsPage() {
       // Save settings to backend
       const apiClient = (await import('@/lib/api-client')).default;
       await apiClient.put('/api/v1/users/settings', settings);
-      
+
       // Show success toast
       const { toast } = await import('@/hooks/use-toast');
       toast({
@@ -95,8 +97,8 @@ export default function SettingsPage() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg text-left ${activeTab === tab.id
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                ? "bg-blue-600 text-white"
+                : "text-slate-400 hover:bg-slate-800 hover:text-white"
                 }`}
             >
               <span>{tab.icon}</span>
@@ -230,33 +232,63 @@ export default function SettingsPage() {
 
           {activeTab === "api" && (
             <div className="space-y-6">
-              <h2 className="text-lg font-semibold text-white">API Keys</h2>
-              <p className="text-slate-400">Configure AI provider API keys for enhanced features</p>
+              <h2 className="text-lg font-semibold text-white">AI Provider Configuration</h2>
+              <p className="text-slate-400">Configure OpenAI-compatible API for AI Supervisor and trading analysis</p>
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1">OpenAI API Key</label>
+                  <label className="block text-sm text-slate-400 mb-1">API Key *</label>
                   <input
                     type="password"
-                    value={settings.openaiKey}
-                    onChange={(e) => setSettings({ ...settings, openaiKey: e.target.value })}
+                    value={settings.llmApiKey}
+                    onChange={(e) => setSettings({ ...settings, llmApiKey: e.target.value })}
                     placeholder="sk-..."
                     className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
                   />
-                  <p className="text-xs text-slate-500 mt-1">Used for AI Supervisor chat</p>
+                  <p className="text-xs text-slate-500 mt-1">Your LLM provider API key (supports OpenAI, OpenRouter, Groq, etc.)</p>
                 </div>
 
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1">Anthropic API Key</label>
+                  <label className="block text-sm text-slate-400 mb-1">Base URL (Optional)</label>
                   <input
-                    type="password"
-                    value={settings.anthropicKey}
-                    onChange={(e) => setSettings({ ...settings, anthropicKey: e.target.value })}
-                    placeholder="sk-ant-..."
+                    type="text"
+                    value={settings.llmBaseUrl}
+                    onChange={(e) => setSettings({ ...settings, llmBaseUrl: e.target.value })}
+                    placeholder="https://api.openai.com/v1"
                     className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
                   />
-                  <p className="text-xs text-slate-500 mt-1">Fallback AI provider</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Leave empty for OpenAI. Common alternatives:
+                  </p>
+                  <ul className="text-xs text-slate-500 mt-1 ml-4 list-disc">
+                    <li>OpenRouter: https://openrouter.ai/api/v1</li>
+                    <li>Groq: https://api.groq.com/openai/v1</li>
+                    <li>Together AI: https://api.together.xyz/v1</li>
+                    <li>DeepSeek: https://api.deepseek.com/v1</li>
+                    <li>Local (Ollama): http://localhost:11434/v1</li>
+                  </ul>
                 </div>
+
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Model</label>
+                  <input
+                    type="text"
+                    value={settings.llmModel}
+                    onChange={(e) => setSettings({ ...settings, llmModel: e.target.value })}
+                    placeholder="gpt-4-turbo-preview"
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    Examples: gpt-4o, gpt-4-turbo, claude-3-opus, llama-3.1-70b, deepseek-chat
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4 bg-blue-600/10 border border-blue-600/30 rounded-lg">
+                <p className="text-blue-400 text-sm font-medium mb-2">💡 OpenAI Compatible</p>
+                <p className="text-slate-400 text-sm">
+                  This settings supports any OpenAI-compatible API. You can use providers like OpenRouter, Groq, Together AI, DeepSeek, or even local models via Ollama.
+                </p>
               </div>
 
               <div className="p-4 bg-yellow-600/10 border border-yellow-600/30 rounded-lg">

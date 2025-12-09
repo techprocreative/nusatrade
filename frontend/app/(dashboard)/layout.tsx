@@ -23,7 +23,8 @@ import {
   X,
   Wifi,
   WifiOff,
-  ChevronRight
+  ChevronRight,
+  ShieldCheck
 } from "lucide-react";
 
 const navItems = [
@@ -35,6 +36,10 @@ const navItems = [
   { href: "/connections", label: "Connections", icon: Link2 },
   { href: "/security", label: "Security", icon: Shield },
   { href: "/settings", label: "Settings", icon: Settings },
+];
+
+const adminNavItems = [
+  { href: "/admin/settings", label: "Admin Panel", icon: ShieldCheck },
 ];
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -137,6 +142,41 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               </Link>
             );
           })}
+
+          {/* Admin Section - only show for admin users */}
+          {user?.role === "admin" && (
+            <>
+              <div className="pt-4 pb-2">
+                <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Admin</p>
+              </div>
+              {adminNavItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => mobile && setIsMobileMenuOpen(false)}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group",
+                      isActive
+                        ? "bg-gradient-to-r from-amber-500/20 to-red-500/20 text-white border border-amber-500/30"
+                        : "text-amber-400/70 hover:bg-slate-800 hover:text-amber-400"
+                    )}
+                  >
+                    <Icon className={cn(
+                      "w-5 h-5 transition-colors",
+                      isActive ? "text-amber-400" : "text-amber-500/50 group-hover:text-amber-400"
+                    )} />
+                    <span className="flex-1">{item.label}</span>
+                    {isActive && (
+                      <ChevronRight className="w-4 h-4 text-amber-400" />
+                    )}
+                  </Link>
+                );
+              })}
+            </>
+          )}
         </nav>
 
         {/* User Info & Logout */}
