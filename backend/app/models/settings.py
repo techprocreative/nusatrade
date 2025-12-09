@@ -5,7 +5,7 @@ from enum import Enum as PyEnum
 from sqlalchemy import Column, String, Text, Boolean, DateTime, Enum
 from sqlalchemy.sql import func
 
-from app.models.base import Base
+from app.core.database import Base
 
 
 class SettingCategory(str, PyEnum):

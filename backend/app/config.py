@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4-turbo-preview"
     anthropic_api_key: Optional[str] = None
     anthropic_model: str = "claude-3-sonnet-20240229"
+    
+    # Settings encryption key for admin panel
+    settings_encryption_key: Optional[str] = None
 
     # Storage (Cloudflare R2)
     r2_account_id: Optional[str] = None

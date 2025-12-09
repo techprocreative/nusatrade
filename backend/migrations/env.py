@@ -1,6 +1,7 @@
 import asyncio
 from logging.config import fileConfig
 import os
+from dotenv import load_dotenv
 
 from sqlalchemy import engine_from_config, pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
@@ -10,6 +11,9 @@ from alembic import context
 from app.core.database import Base
 import app.models  # noqa
 
+# Load environment variables from .env file
+load_dotenv()
+
 config = context.config
 
 if config.config_file_name is not None:
@@ -17,12 +21,14 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-# Use URL from alembic.ini or environment variable
-# Don't override with settings to allow alembic.ini control for local dev
+# Use DATABASE_URL from environment variable (.env file)
+# This allows alembic to work with the same config as the application
+def get_url():
+    return os.getenv("DATABASE_URL", config.get_main_option("sqlalchemy.url"))
 
 
 def run_migrations_offline() -> None:
-    url = config.get_main_option("sqlalchemy.url")
+    url = get_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -42,8 +48,11 @@ def do_run_migrations(connection):
 
 
 def run_migrations_online() -> None:
+    configuration = config.get_section(config.config_ini_section)
+    configuration["sqlalchemy.url"] = get_url()
+    
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section),
+        configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
