@@ -47,16 +47,37 @@ class MessageOut(BaseModel):
 
 # LLM Client wrapper
 class LLMClient:
-    """Unified LLM client supporting OpenAI-compatible APIs."""
+    """Unified LLM client supporting OpenAI-compatible APIs with database config support."""
 
     def __init__(self):
         self.client = None
         self.anthropic_client = None  # Fallback only
         self._init_clients()
 
-    def _init_clients(self):
-        """Initialize LLM client with OpenAI-compatible interface."""
-        config = settings.effective_llm_config
+    def _init_clients(self, db: Optional[Session] = None):
+        """Initialize LLM client with OpenAI-compatible interface.
+        
+        Args:
+            db: Optional database session to load config from database.
+                If provided, loads from SettingsService with env fallback.
+                If None, uses environment variables only.
+        """
+        # Load config from database if db session provided
+        if db:
+            try:
+                from app.core.settings_service import SettingsService
+                service = SettingsService(db)
+                config = service.get_llm_config(
+                    fallback_api_key=settings.llm_api_key or settings.openai_api_key,
+                    fallback_base_url=settings.llm_base_url,
+                    fallback_model=settings.llm_model or settings.openai_model
+                )
+            except Exception as e:
+                logger.warning(f"Failed to load config from database, using env vars: {e}")
+                config = settings.effective_llm_config
+        else:
+            # Use environment variables
+            config = settings.effective_llm_config
         
         if config["api_key"]:
             try:
@@ -80,6 +101,17 @@ class LLMClient:
                 logger.info("Anthropic fallback client initialized")
             except ImportError:
                 logger.warning("anthropic package not installed")
+    
+    def reload_config(self, db: Session):
+        """Reload LLM configuration from database.
+        
+        This allows runtime configuration changes without restarting the server.
+        
+        Args:
+            db: Database session to load config from
+        """
+        logger.info("Reloading LLM configuration from database")
+        self._init_clients(db)
 
     async def chat(
         self,

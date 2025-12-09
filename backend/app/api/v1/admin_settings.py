@@ -141,6 +141,23 @@ def update_setting(
     db.commit()
     db.refresh(setting)
     
+    # Invalidate cache and reload LLM client if AI provider settings changed
+    if update.category == SettingCategory.AI_PROVIDER:
+        try:
+            from app.core.settings_service import SettingsService
+            from app.api.v1.ai import llm_client
+            
+            # Invalidate cache
+            service = SettingsService(db)
+            service.invalidate_cache(key)
+            
+            # Reload LLM client with new config
+            llm_client.reload_config(db)
+        except Exception as e:
+            # Log error but don't fail the update
+            import logging
+            logging.warning(f"Failed to reload LLM client: {e}")
+    
     return {
         "message": "Setting updated successfully",
         "key": key,
