@@ -115,7 +115,7 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-3xl font-bold text-white">Dashboard</h1>
           <p className="text-slate-400 mt-1">
-            Welcome back! Here's an overview of your trading activity.
+            Welcome back! Here&apos;s an overview of your trading activity.
           </p>
         </div>
         <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-full">
