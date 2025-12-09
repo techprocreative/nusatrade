@@ -10,7 +10,7 @@ from sqlalchemy.dialects import postgresql
 
 
 revision = "0006_enhance_strategies"
-down_revision = "0005_add_system_settings"
+down_revision = "0005"
 branch_labels = None
 depends_on = None
 
