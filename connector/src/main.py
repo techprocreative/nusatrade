@@ -100,8 +100,6 @@ def handle_exception(exc_type, exc_value, exc_traceback):
     
     # Keep console open
     print("\nCRITICAL ERROR OCCURRED!")
-    # Keep console open
-    print("\nCRITICAL ERROR OCCURRED!")
     print(error_msg)
     input("\nPress Enter to exit...")
     sys.exit(1)
