@@ -8,6 +8,7 @@ from app.models.strategy import Strategy
 from app.models.backtest import BacktestSession, BacktestResult, HistoricalData
 from app.models.ml import MLModel, MLPrediction
 from app.models.llm import LLMConversation, LLMMessage, MarketAnalysis
+from app.models.settings import SystemSetting, SettingCategory
 
 __all__ = [
     "Base",
@@ -27,4 +28,6 @@ __all__ = [
     "LLMConversation",
     "LLMMessage",
     "MarketAnalysis",
+    "SystemSetting",
+    "SettingCategory",
 ]

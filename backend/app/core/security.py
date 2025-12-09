@@ -297,3 +297,46 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         
         return response
+
+
+# ============================================
+# Settings Encryption
+# ============================================
+
+def get_encryption_key() -> bytes:
+    """Get encryption key for system settings."""
+    import os
+    key = os.getenv("SETTINGS_ENCRYPTION_KEY")
+    if not key:
+        # In development, use a default key (NOT for production!)
+        if settings.environment == "development":
+            # Generate a consistent key for development
+            import hashlib
+            key = hashlib.sha256(b"dev-encryption-key").hexdigest()[:43] + "="
+        else:
+            raise RuntimeError(
+                "SETTINGS_ENCRYPTION_KEY must be set in production. "
+                "Generate one with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+            )
+    return key.encode() if isinstance(key, str) else key
+
+
+def encrypt_setting_value(value: str) -> str:
+    """Encrypt a sensitive setting value."""
+    try:
+        from cryptography.fernet import Fernet
+        cipher = Fernet(get_encryption_key())
+        return cipher.encrypt(value.encode()).decode()
+    except ImportError:
+        raise RuntimeError("cryptography package required for settings encryption. Install with: pip install cryptography")
+
+
+def decrypt_setting_value(encrypted: str) -> str:
+    """Decrypt a sensitive setting value."""
+    try:
+        from cryptography.fernet import Fernet
+        cipher = Fernet(get_encryption_key())
+        return cipher.decrypt(encrypted.encode()).decode()
+    except ImportError:
+        raise RuntimeError("cryptography package required for settings encryption. Install with: pip install cryptography")
+
