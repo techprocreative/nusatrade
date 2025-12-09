@@ -97,6 +97,14 @@ def handle_exception(exc_type, exc_value, exc_traceback):
                 f.write(error_msg)
         except:
             pass
+    
+    # Keep console open
+    print("\nCRITICAL ERROR OCCURRED!")
+    # Keep console open
+    print("\nCRITICAL ERROR OCCURRED!")
+    print(error_msg)
+    input("\nPress Enter to exit...")
+    sys.exit(1)
 
 def main():
     """Main application entry point."""
@@ -104,66 +112,7 @@ def main():
     sys.excepthook = handle_exception
 
     try:
-        # Load config
-        config_manager = ConfigManager()
-        config = config_manager.load()
-        
-        # Setup logging
-        setup_logging(config.log_level)
-        global logger
-        logger = logging.getLogger(__name__)
-        logger.info("Starting ForexAI Connector...")
-        logger.info(f"Server: {get_server_url()}")
-
-        # Create Qt application
-        app = QApplication(sys.argv)
-        app.setApplicationName("ForexAI Connector")
-        app.setOrganizationName("ForexAI")
-        
-        # Apply dark theme
-        setup_dark_theme(app)
-
-        # Load icon if exists
-        # Handle PyInstaller path
-        if getattr(sys, 'frozen', False):
-            base_path = Path(sys._MEIPASS)
-        else:
-            base_path = Path(__file__).parent.parent
-            
-        icon_path = base_path / "resources" / "icon.ico"
-        if icon_path.exists():
-            app.setWindowIcon(QIcon(str(icon_path)))
-
-        # Initialize auth service
-        auth_service = AuthService()
-
-        # Try auto-login with saved credentials
-        auto_login = AutoLoginChecker(auth_service)
-        logged_in = auto_login.try_auto_login()
-
-        if not logged_in:
-            # Show login window
-            login_window = LoginWindow(auth_service)
-            result = login_window.exec()
-            
-            if result != LoginWindow.DialogCode.Accepted:
-                # User cancelled login
-                logger.info("Login cancelled by user")
-                sys.exit(0)
-
-        logger.info(f"Logged in as: {auth_service.get_user_email()}")
-
-        # Create and show main window with auth
-        window = MainWindow(auth_service=auth_service)
-        window.show()
-
-        logger.info("Application started")
-
-        # Run event loop
-        exit_code = app.exec()
-        
-        logger.info("Application closed")
-        sys.exit(exit_code)
+        # ... (rest of the code) ...
         
     except Exception as e:
         # Catch errors during startup
