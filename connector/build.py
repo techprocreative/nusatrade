@@ -22,7 +22,7 @@ def build():
         sys.executable, "-m", "PyInstaller",
         "--name=ForexAI-Connector",
         "--onefile",
-        "--windowed",
+        "--console",  # Changed from --windowed for debugging
         "--clean",
         f"--distpath={script_dir / 'dist'}",
         f"--workpath={script_dir / 'build'}",

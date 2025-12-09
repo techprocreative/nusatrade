@@ -1,6 +1,8 @@
 """Main entry point for ForexAI Connector."""
 
 import sys
+import os
+import traceback
 import logging
 from pathlib import Path
 
@@ -64,61 +66,109 @@ def setup_dark_theme(app: QApplication):
     app.setPalette(palette)
 
 
+def handle_exception(exc_type, exc_value, exc_traceback):
+    """Handle uncaught exceptions."""
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+
+    logger = logging.getLogger(__name__)
+    logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+    
+    # Show error dialog
+    error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+    try:
+        app = QApplication.instance()
+        if not app:
+            app = QApplication(sys.argv)
+        
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Icon.Critical)
+        msg.setText("An unexpected error occurred")
+        msg.setInformativeText(str(exc_value))
+        msg.setDetailedText(error_msg)
+        msg.setWindowTitle("Error")
+        msg.exec()
+    except:
+        # If Qt fails, write to file on Desktop
+        try:
+            desktop = Path(os.environ.get("USERPROFILE", "")) / "Desktop"
+            with open(desktop / "forexai_crash.txt", "w") as f:
+                f.write(error_msg)
+        except:
+            pass
+
 def main():
     """Main application entry point."""
-    # Load config
-    config_manager = ConfigManager()
-    config = config_manager.load()
-    
-    # Setup logging
-    setup_logging(config.log_level)
-    logger = logging.getLogger(__name__)
-    logger.info("Starting ForexAI Connector...")
-    logger.info(f"Server: {get_server_url()}")
+    # Setup global exception handler
+    sys.excepthook = handle_exception
 
-    # Create Qt application
-    app = QApplication(sys.argv)
-    app.setApplicationName("ForexAI Connector")
-    app.setOrganizationName("ForexAI")
-    
-    # Apply dark theme
-    setup_dark_theme(app)
-
-    # Load icon if exists
-    icon_path = Path(__file__).parent.parent / "resources" / "icon.ico"
-    if icon_path.exists():
-        app.setWindowIcon(QIcon(str(icon_path)))
-
-    # Initialize auth service
-    auth_service = AuthService()
-
-    # Try auto-login with saved credentials
-    auto_login = AutoLoginChecker(auth_service)
-    logged_in = auto_login.try_auto_login()
-
-    if not logged_in:
-        # Show login window
-        login_window = LoginWindow(auth_service)
-        result = login_window.exec()
+    try:
+        # Load config
+        config_manager = ConfigManager()
+        config = config_manager.load()
         
-        if result != LoginWindow.DialogCode.Accepted:
-            # User cancelled login
-            logger.info("Login cancelled by user")
-            sys.exit(0)
+        # Setup logging
+        setup_logging(config.log_level)
+        global logger
+        logger = logging.getLogger(__name__)
+        logger.info("Starting ForexAI Connector...")
+        logger.info(f"Server: {get_server_url()}")
 
-    logger.info(f"Logged in as: {auth_service.get_user_email()}")
+        # Create Qt application
+        app = QApplication(sys.argv)
+        app.setApplicationName("ForexAI Connector")
+        app.setOrganizationName("ForexAI")
+        
+        # Apply dark theme
+        setup_dark_theme(app)
 
-    # Create and show main window with auth
-    window = MainWindow(auth_service=auth_service)
-    window.show()
+        # Load icon if exists
+        # Handle PyInstaller path
+        if getattr(sys, 'frozen', False):
+            base_path = Path(sys._MEIPASS)
+        else:
+            base_path = Path(__file__).parent.parent
+            
+        icon_path = base_path / "resources" / "icon.ico"
+        if icon_path.exists():
+            app.setWindowIcon(QIcon(str(icon_path)))
 
-    logger.info("Application started")
+        # Initialize auth service
+        auth_service = AuthService()
 
-    # Run event loop
-    exit_code = app.exec()
-    
-    logger.info("Application closed")
-    sys.exit(exit_code)
+        # Try auto-login with saved credentials
+        auto_login = AutoLoginChecker(auth_service)
+        logged_in = auto_login.try_auto_login()
+
+        if not logged_in:
+            # Show login window
+            login_window = LoginWindow(auth_service)
+            result = login_window.exec()
+            
+            if result != LoginWindow.DialogCode.Accepted:
+                # User cancelled login
+                logger.info("Login cancelled by user")
+                sys.exit(0)
+
+        logger.info(f"Logged in as: {auth_service.get_user_email()}")
+
+        # Create and show main window with auth
+        window = MainWindow(auth_service=auth_service)
+        window.show()
+
+        logger.info("Application started")
+
+        # Run event loop
+        exit_code = app.exec()
+        
+        logger.info("Application closed")
+        sys.exit(exit_code)
+        
+    except Exception as e:
+        # Catch errors during startup
+        handle_exception(type(e), e, e.__traceback__)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
