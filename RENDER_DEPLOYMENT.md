@@ -34,13 +34,15 @@ Complete step-by-step guide for deploying ForexAI Platform to Render.com.
 
 | Service | Plan | Cost |
 |---------|------|------|
-| Backend (Web Service) | Starter | $7/month |
-| Database (PostgreSQL) | Starter | $7/month |
-| Frontend (Static Site) | Free | $0 |
+| Backend (Render) | Starter | $7/month |
+| Database (Supabase) | Free | **$0** 🎉 |
+| Frontend (Vercel) | Free | $0 |
 | Redis (Upstash) | Free | $0 |
-| **Total** | | **$14/month** |
+| **Total** | | **$7/month** |
 
 Compare to Railway: ~$25-30/month for same setup.
+
+**💡 Even better: Supabase free tier is permanent (500 MB), not just 90 days!**
 
 ---
 
@@ -48,10 +50,11 @@ Compare to Railway: ~$25-30/month for same setup.
 
 ### Required Accounts
 
-1. **Render.com** - [Sign up](https://render.com)
-2. **GitHub** - Your code repository
-3. **Upstash** - For Redis (free tier)
-4. **OpenAI** - API key for AI features
+1. **Render.com** - [Sign up](https://render.com) - For backend hosting
+2. **Supabase** - [Sign up](https://supabase.com) - For database ⭐ **RECOMMENDED**
+3. **GitHub** - Your code repository
+4. **Upstash** - [Sign up](https://upstash.com) - For Redis (free tier)
+5. **OpenAI** - API key for AI features
 
 ### Required Tools
 
@@ -66,30 +69,63 @@ node --version    # 20+
 
 ## Database Setup
 
-### Step 1: Create PostgreSQL Database
+### Option A: Supabase (⭐ RECOMMENDED)
+
+**Why Supabase?**
+- ✅ **Free forever** (500 MB, not just 90 days)
+- ✅ **Auto backups** (Point-in-time recovery)
+- ✅ **Better tooling** (SQL Editor, Table Editor)
+- ✅ **Auth included** (if you need it later)
+- ✅ **Realtime** (WebSocket support built-in)
+- ✅ **Storage** (File uploads if needed)
+
+#### Step 1: Create Supabase Project
+
+1. Go to [Supabase Dashboard](https://supabase.com/dashboard)
+2. Click **New Project**
+3. Configure:
+   - **Name**: `forexai`
+   - **Database Password**: Generate strong password (save it!)
+   - **Region**: Choose closest to your Render region
+   - **Plan**: Free (500 MB, permanent)
+4. Click **Create new project**
+5. Wait ~2 minutes for provisioning
+
+#### Step 2: Get Connection String
+
+1. Go to **Project Settings** → **Database**
+2. Scroll to **Connection string** → **URI**
+3. Copy the connection string:
+   ```
+   postgresql://postgres:[YOUR-PASSWORD]@db.xxx.supabase.co:5432/postgres
+   ```
+4. Replace `[YOUR-PASSWORD]` with your actual password
+5. **Important**: Change `postgres` to `postgres.pooler` for connection pooling:
+   ```
+   postgresql://postgres:[YOUR-PASSWORD]@db.xxx.supabase.co:6543/postgres
+   ```
+   (Note: port changed from 5432 to 6543 for pooler)
+
+#### Step 3: Enable Connection Pooling (Recommended)
+
+1. In Supabase Dashboard → **Database** → **Connection Pooling**
+2. Enable **Transaction Mode** (best for FastAPI)
+3. Use the pooler connection string (port 6543)
+
+### Option B: Render PostgreSQL (Alternative)
+
+Only use this if you specifically need Render-hosted database.
 
 1. Go to [Render Dashboard](https://dashboard.render.com)
 2. Click **New** → **PostgreSQL**
 3. Configure:
    - **Name**: `forexai-db`
    - **Database**: `forexai`
-   - **User**: `forexai`
-   - **Region**: Choose closest to your users
+   - **Region**: Same as backend
    - **Plan**: Free (90 days) or Starter ($7/month)
-4. Click **Create Database**
+4. Copy connection string
 
-### Step 2: Get Connection String
-
-1. Wait for database to be ready (~2 minutes)
-2. Copy **Internal Database URL**:
-   ```
-   postgresql://forexai:***@dpg-***-a/forexai
-   ```
-3. Save this for backend deployment
-
-### Step 3: Run Migrations (Later)
-
-We'll run migrations after backend is deployed.
+**Note**: Render free tier only lasts 90 days, then $7/month.
 
 ---
 
@@ -137,8 +173,8 @@ Click **Environment** tab and add:
 ENVIRONMENT=production
 LOG_LEVEL=INFO
 
-# Database (from Step 2 above)
-DATABASE_URL=postgresql://forexai:***@dpg-***-a/forexai
+# Database (Supabase - from Database Setup section)
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.xxx.supabase.co:6543/postgres
 
 # Security - GENERATE NEW SECRETS!
 JWT_SECRET=<generate-with-command-below>
@@ -283,9 +319,10 @@ DEBUG=false
 LOG_LEVEL=INFO
 
 # ============================================
-# DATABASE
+# DATABASE (Supabase)
 # ============================================
-DATABASE_URL=postgresql://forexai:***@dpg-***-a/forexai
+# Use Supabase pooler connection string (port 6543)
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.xxx.supabase.co:6543/postgres
 REDIS_URL=redis://default:***@***.upstash.io:6379
 
 # ============================================
@@ -532,32 +569,41 @@ BACKEND_CORS_ORIGINS=https://yourdomain.com
 
 ## Cost Optimization
 
-### Free Tier Setup ($0/month)
+### Free Tier Setup ($0/month) 🎉
 
-- Backend: Free tier (sleeps after 15 min)
-- Database: Free 90 days, then $7/month
+- Backend: Render Free tier (sleeps after 15 min)
+- Database: **Supabase Free tier (500 MB, permanent)** ✅
 - Frontend: Vercel free tier
 - Redis: Upstash free tier
 
-**Total**: $0 for 90 days, then $7/month
+**Total**: **$0/month forever!** (with sleep on backend)
 
-### Production Setup ($14/month)
+### Production Setup ($7/month) ⭐ RECOMMENDED
 
-- Backend: Starter ($7/month)
-- Database: Starter ($7/month)
+- Backend: Render Starter ($7/month) - Always on
+- Database: **Supabase Free tier (500 MB, permanent)** ✅
 - Frontend: Vercel free tier
 - Redis: Upstash free tier
 
-**Total**: $14/month
+**Total**: **$7/month** (vs $25-30/month on Railway!)
 
-### High-Traffic Setup ($50/month)
+### Growing Business ($32/month)
 
-- Backend: Pro ($25/month)
-- Database: Pro ($20/month)
+- Backend: Render Starter ($7/month)
+- Database: **Supabase Pro ($25/month)** - 8 GB, better performance
+- Frontend: Vercel free tier
+- Redis: Upstash free tier
+
+**Total**: $32/month
+
+### High-Traffic Setup ($52/month)
+
+- Backend: Render Pro ($25/month)
+- Database: Supabase Pro ($25/month)
 - Frontend: Vercel Pro ($20/month)
 - Redis: Upstash paid ($5/month)
 
-**Total**: $70/month
+**Total**: $75/month
 
 ---
 
@@ -636,19 +682,21 @@ databases:
 
 ---
 
-## Comparison: Render vs Railway vs Heroku
+## Comparison: Render + Supabase vs Railway vs Heroku
 
-| Feature | Render | Railway | Heroku |
-|---------|--------|---------|--------|
-| Free Tier | 750 hrs/month | $5 credit | 550 hrs/month |
+| Feature | Render + Supabase | Railway | Heroku |
+|---------|-------------------|---------|--------|
+| Free Tier | 750 hrs/month + DB free forever | $5 credit | 550 hrs/month |
+| Database Free | ✅ **500 MB permanent** | ❌ $5/month | ❌ $9/month |
 | Starter Price | $7/month | ~$10/month | $7/month |
-| Database | $7/month | $5/month | $9/month |
+| Database Starter | **$0 (free tier)** | $5/month | $9/month |
 | Build Speed | ⚡ Fast | Medium | Slow |
 | DX | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ |
 | Documentation | Excellent | Good | Excellent |
-| **Total Cost** | **$14/month** | **$15/month** | **$16/month** |
+| Database Tooling | ⭐⭐⭐⭐⭐ (Supabase) | ⭐⭐⭐ | ⭐⭐ |
+| **Total Cost** | **$7/month** | **$15/month** | **$16/month** |
 
-**Winner: Render** 🏆
+**Winner: Render + Supabase** 🏆 (50%+ cheaper!)
 
 ---
 
