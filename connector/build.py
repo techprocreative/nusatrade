@@ -39,6 +39,7 @@ def build():
     hidden_imports = [
         # MetaTrader5
         "MetaTrader5",
+        "numpy",  # Required by MetaTrader5
         # PyQt6 - Core modules
         "PyQt6",
         "PyQt6.QtCore",

@@ -18,11 +18,11 @@ logger = logging.getLogger(__name__)
 # PRODUCTION SERVER CONFIGURATION
 # Hardcode your production URL here
 # ============================================
-PRODUCTION_SERVER = "https://api.forexai.com"  # Change to your domain
+PRODUCTION_SERVER = "https://nusatrade.onrender.com"  # Render backend URL
 DEVELOPMENT_SERVER = "http://localhost:8000"
 
 # Set to True for production build
-USE_PRODUCTION = False
+USE_PRODUCTION = True
 # ============================================
 
 
