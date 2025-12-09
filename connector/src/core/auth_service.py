@@ -19,9 +19,10 @@ logger = logging.getLogger(__name__)
 # ============================================
 PRODUCTION_SERVER = "https://nusatrade.onrender.com"
 DEVELOPMENT_SERVER = "http://localhost:8000"
+FRONTEND_URL = "https://nusatrade-beta.vercel.app"
 
-# Set to True for production build, False for development
-USE_PRODUCTION = False  # Change to True before building release
+# Production mode by default
+USE_PRODUCTION = True
 # ============================================
 
 
@@ -35,6 +36,11 @@ def get_server_url() -> str:
     if USE_PRODUCTION:
         return PRODUCTION_SERVER
     return DEVELOPMENT_SERVER
+
+
+def get_frontend_url() -> str:
+    """Get the frontend URL for registration."""
+    return FRONTEND_URL
 
 
 @dataclass
