@@ -157,17 +157,49 @@ Executable: C:\...\connector\dist\ForexAI-Connector.exe
 
 ---
 
-### Step 9: Lokasi File Hasil Build
+## 🎯 Hasil Akhir
 
-Setelah build berhasil, file `.exe` ada di:
+Setelah build berhasil, Anda akan mendapatkan:
+- File executable: `dist/ForexAI-Connector.exe`
+- Ukuran: ~15-20 MB (sudah termasuk Python runtime)
+- Siap didistribusikan tanpa perlu install Python
 
-```
-connector/
-└── dist/
-    └── ForexAI-Connector.exe   <-- File ini yang didistribusikan
-```
+## 🔧 Troubleshooting
 
----
+### Error: "did not find executable at Python314"
+
+**Penyebab**: Virtual environment dibuat dengan versi Python yang berbeda dari yang terinstall sekarang.
+
+**Solusi**:
+1. Jalankan script fix:
+   ```batch
+   fix_venv.bat
+   ```
+   
+2. Atau hapus manual folder `venv`:
+   ```batch
+   rmdir /s /q venv
+   ```
+   
+3. Kemudian jalankan ulang `build_windows.bat`
+
+Script akan otomatis membuat virtual environment baru dengan Python version yang benar.
+
+### Error: Python tidak ditemukan
+
+**Solusi**: 
+- Pastikan Python sudah terinstall
+- Tambahkan Python ke PATH saat instalasi
+- Restart Command Prompt setelah install Python
+
+### Build gagal dengan error lain
+
+**Solusi**:
+1. Pastikan semua dependencies terinstall: `pip install -r requirements.txt`
+2. Update PyInstaller: `pip install --upgrade pyinstaller`
+3. Periksa log error untuk detail lebih lanjut
+
+## 📝 Catatan Penting
 
 ## 🧹 Membersihkan Build Artifacts
 
