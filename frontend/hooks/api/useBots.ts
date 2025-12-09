@@ -52,9 +52,9 @@ export function useToggleMLModel() {
 
   return useMutation({
     mutationFn: async ({ modelId, isActive }: { modelId: string; isActive: boolean }) => {
-      const response = await apiClient.put(`/api/v1/ml/models/${modelId}`, {
-        is_active: isActive,
-      });
+      // Use separate activate/deactivate endpoints as per backend API
+      const endpoint = isActive ? 'activate' : 'deactivate';
+      const response = await apiClient.post(`/api/v1/ml/models/${modelId}/${endpoint}`);
       return response.data;
     },
     onSuccess: (_, variables) => {

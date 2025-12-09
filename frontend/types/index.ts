@@ -123,12 +123,14 @@ export interface ChatMessage {
 
 export interface ChatRequest {
   message: string;
-  context?: Record<string, any>;
+  conversation_id?: string;
+  context_type?: 'general' | 'trade_analysis' | 'market_summary';
 }
 
 export interface ChatResponse {
-  response: string;
+  reply: string;
   conversation_id: string;
+  tokens_used: number;
 }
 
 // Dashboard types

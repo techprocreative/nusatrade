@@ -47,12 +47,13 @@ export default function AISupervisorPage() {
     try {
       const response = await sendMessageMutation.mutateAsync({
         message: userMessage.content,
+        context_type: "general",
       });
 
       const aiMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: response.response,
+        content: response.reply,
         timestamp: new Date(),
       };
 

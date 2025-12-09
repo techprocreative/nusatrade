@@ -7,9 +7,13 @@ import { useToast } from '@/hooks/use-toast';
 export function useSendMessage() {
   const { toast } = useToast();
 
-  return useMutation({
+  return useMutation<ChatResponse, Error, ChatRequest>({
     mutationFn: async (data: ChatRequest) => {
-      const response = await apiClient.post<ChatResponse>('/api/v1/ai/chat', data);
+      const response = await apiClient.post<ChatResponse>('/api/v1/ai/chat', {
+        message: data.message,
+        conversation_id: data.conversation_id,
+        context_type: data.context_type || 'general',
+      });
       return response.data;
     },
     onError: (error: any) => {

@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useWebSocketConnection, useTradeNotifications } from "@/hooks/useWebSocket";
-import { connectSocket, disconnectSocket } from "@/lib/websocket";
+import { wsClient } from "@/lib/websocket";
 import {
   LayoutDashboard,
   LineChart,
@@ -55,11 +55,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (user) {
-      connectSocket();
+      const token = localStorage.getItem('token');
+      if (token) {
+        wsClient.connect(token);
+      }
     }
 
     return () => {
-      disconnectSocket();
+      wsClient.disconnect();
     };
   }, [user]);
 

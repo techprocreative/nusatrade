@@ -1,66 +1,100 @@
-import { useEffect, useState } from 'react';
-import { getSocket, PriceUpdate, PositionUpdate, TradeNotification } from '@/lib/websocket';
+import { useEffect, useState, useCallback } from 'react';
+import {
+  wsClient,
+  ConnectionStatus,
+  PositionUpdate,
+  TradeResult,
+  AccountUpdate,
+} from '@/lib/websocket';
 import { useToast } from '@/hooks/use-toast';
 
+/**
+ * Hook for managing WebSocket connection state
+ */
 export function useWebSocketConnection() {
   const [isConnected, setIsConnected] = useState(false);
-  const socket = getSocket();
 
   useEffect(() => {
     const handleConnect = () => setIsConnected(true);
     const handleDisconnect = () => setIsConnected(false);
 
-    socket.on('connect', handleConnect);
-    socket.on('disconnect', handleDisconnect);
+    wsClient.on('connect', handleConnect);
+    wsClient.on('disconnect', handleDisconnect);
 
-    if (socket.connected) {
-      setIsConnected(true);
-    }
+    // Check initial state
+    setIsConnected(wsClient.isConnected);
 
     return () => {
-      socket.off('connect', handleConnect);
-      socket.off('disconnect', handleDisconnect);
+      wsClient.off('connect', handleConnect);
+      wsClient.off('disconnect', handleDisconnect);
     };
-  }, [socket]);
+  }, []);
 
-  return { isConnected, socket };
+  const connect = useCallback((token: string) => {
+    wsClient.connect(token);
+  }, []);
+
+  const disconnect = useCallback(() => {
+    wsClient.disconnect();
+  }, []);
+
+  return { isConnected, connect, disconnect };
 }
 
-export function usePriceUpdates(symbol?: string) {
-  const [prices, setPrices] = useState<Record<string, PriceUpdate>>({});
-  const socket = getSocket();
+/**
+ * Hook for receiving connection status updates
+ */
+export function useConnectionStatus() {
+  const [connections, setConnections] = useState<ConnectionStatus[]>([]);
 
   useEffect(() => {
-    const handlePriceUpdate = (data: PriceUpdate) => {
-      if (!symbol || data.symbol === symbol) {
-        setPrices((prev) => ({
-          ...prev,
-          [data.symbol]: data,
-        }));
-      }
+    const handleConnectionsStatus = (data: { connections: ConnectionStatus[] }) => {
+      setConnections(data.connections || []);
     };
 
-    socket.on('price_update', handlePriceUpdate);
+    const handleMT5Status = (data: any) => {
+      setConnections((prev) => {
+        const idx = prev.findIndex((c) => c.connection_id === data.connection_id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = {
+            ...updated[idx],
+            mt5_connected: data.connected,
+            broker_name: data.broker_name,
+          };
+          return updated;
+        }
+        return prev;
+      });
+    };
 
-    // Subscribe to symbols
-    if (symbol) {
-      socket.emit('subscribe_prices', { symbols: [symbol] });
-    }
+    const handleDisconnected = (data: { connection_id: string }) => {
+      setConnections((prev) =>
+        prev.map((c) =>
+          c.connection_id === data.connection_id ? { ...c, mt5_connected: false } : c
+        )
+      );
+    };
+
+    wsClient.on('CONNECTIONS_STATUS', handleConnectionsStatus);
+    wsClient.on('MT5_STATUS_UPDATE', handleMT5Status);
+    wsClient.on('CONNECTOR_DISCONNECTED', handleDisconnected);
 
     return () => {
-      socket.off('price_update', handlePriceUpdate);
-      if (symbol) {
-        socket.emit('unsubscribe_prices', { symbols: [symbol] });
-      }
+      wsClient.off('CONNECTIONS_STATUS', handleConnectionsStatus);
+      wsClient.off('MT5_STATUS_UPDATE', handleMT5Status);
+      wsClient.off('CONNECTOR_DISCONNECTED', handleDisconnected);
     };
-  }, [socket, symbol]);
+  }, []);
 
-  return prices;
+  return connections;
 }
 
+/**
+ * Hook for receiving position updates
+ */
 export function usePositionUpdates() {
   const [positions, setPositions] = useState<Record<string, PositionUpdate>>({});
-  const socket = getSocket();
 
   useEffect(() => {
     const handlePositionUpdate = (data: PositionUpdate) => {
@@ -70,33 +104,137 @@ export function usePositionUpdates() {
       }));
     };
 
-    socket.on('position_update', handlePositionUpdate);
+    wsClient.on('POSITION_UPDATE', handlePositionUpdate);
 
     return () => {
-      socket.off('position_update', handlePositionUpdate);
+      wsClient.off('POSITION_UPDATE', handlePositionUpdate);
     };
-  }, [socket]);
+  }, []);
 
   return positions;
 }
 
-export function useTradeNotifications() {
-  const { toast } = useToast();
-  const socket = getSocket();
+/**
+ * Hook for receiving account updates
+ */
+export function useAccountUpdates() {
+  const [accounts, setAccounts] = useState<Record<string, AccountUpdate>>({});
 
   useEffect(() => {
-    const handleNotification = (data: TradeNotification) => {
+    const handleAccountUpdate = (data: AccountUpdate) => {
+      setAccounts((prev) => ({
+        ...prev,
+        [data.connection_id]: data,
+      }));
+    };
+
+    wsClient.on('ACCOUNT_UPDATE', handleAccountUpdate);
+
+    return () => {
+      wsClient.off('ACCOUNT_UPDATE', handleAccountUpdate);
+    };
+  }, []);
+
+  return accounts;
+}
+
+/**
+ * Hook for receiving trade notifications with toast display
+ */
+export function useTradeNotifications() {
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const handleTradeResult = (data: TradeResult) => {
+      if (data.success) {
+        toast({
+          title: 'Trade Executed',
+          description: data.message || `Order ${data.order_id} executed successfully`,
+        });
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Trade Failed',
+          description: data.error || 'Failed to execute trade',
+        });
+      }
+    };
+
+    const handleConnectorError = (data: { error: string; connection_id: string }) => {
       toast({
-        title: data.type.replace(/_/g, ' ').toUpperCase(),
-        description: data.message,
-        variant: data.type === 'stop_loss' ? 'destructive' : 'default',
+        variant: 'destructive',
+        title: 'Connector Error',
+        description: data.error,
       });
     };
 
-    socket.on('trade_notification', handleNotification);
+    const handleConnectorDisconnected = (data: { connection_id: string }) => {
+      toast({
+        variant: 'destructive',
+        title: 'Connector Disconnected',
+        description: 'MT5 connector has disconnected',
+      });
+    };
+
+    wsClient.on('TRADE_RESULT', handleTradeResult);
+    wsClient.on('CONNECTOR_ERROR', handleConnectorError);
+    wsClient.on('CONNECTOR_DISCONNECTED', handleConnectorDisconnected);
 
     return () => {
-      socket.off('trade_notification', handleNotification);
+      wsClient.off('TRADE_RESULT', handleTradeResult);
+      wsClient.off('CONNECTOR_ERROR', handleConnectorError);
+      wsClient.off('CONNECTOR_DISCONNECTED', handleConnectorDisconnected);
     };
-  }, [socket, toast]);
+  }, [toast]);
+}
+
+/**
+ * Hook for sending trade commands
+ */
+export function useTradingCommands() {
+  const sendOrder = useCallback(
+    (params: {
+      connection_id: string;
+      action: 'BUY' | 'SELL' | 'CLOSE';
+      symbol: string;
+      order_type?: string;
+      lot_size?: number;
+      stop_loss?: number;
+      take_profit?: number;
+    }) => {
+      const command_id = `cmd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      wsClient.sendTradeCommand({
+        ...params,
+        command_id,
+      });
+      return command_id;
+    },
+    []
+  );
+
+  return { sendOrder };
+}
+
+// Legacy exports for backward compatibility
+export function usePriceUpdates(symbol?: string) {
+  const [prices, setPrices] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    const handlePriceUpdate = (data: any) => {
+      if (!symbol || data.symbol === symbol) {
+        setPrices((prev) => ({
+          ...prev,
+          [data.symbol]: data,
+        }));
+      }
+    };
+
+    wsClient.on('PRICE_UPDATE', handlePriceUpdate);
+
+    return () => {
+      wsClient.off('PRICE_UPDATE', handlePriceUpdate);
+    };
+  }, [symbol]);
+
+  return prices;
 }
