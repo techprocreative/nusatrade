@@ -6,12 +6,12 @@ from typing import Optional
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
     QLineEdit, QPushButton, QCheckBox, QMessageBox,
-    QFrame
+    QFrame, QSizePolicy
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QPixmap
 
-from core.auth_service import AuthService
+from core.auth_service import AuthService, get_server_url
 
 
 logger = logging.getLogger(__name__)
@@ -25,8 +25,8 @@ class LoginWindow(QDialog):
     def __init__(self, auth_service: AuthService, parent=None):
         super().__init__(parent)
         self.auth = auth_service
-        self.setWindowTitle("ForexAI Connector - Login")
-        self.setFixedSize(400, 450)
+        self.setWindowTitle("NusaTrade Connector - Login")
+        self.setFixedSize(500, 550)
         self.setModal(True)
 
         self._build_ui()
@@ -34,54 +34,58 @@ class LoginWindow(QDialog):
     def _build_ui(self):
         """Build the login UI."""
         layout = QVBoxLayout(self)
-        layout.setSpacing(15)
-        layout.setContentsMargins(40, 30, 40, 30)
+        layout.setSpacing(20)
+        layout.setContentsMargins(50, 40, 50, 40)
 
         # Logo/Title
-        title = QLabel("ForexAI")
+        title = QLabel("NusaTrade")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setFont(QFont("Arial", 28, QFont.Weight.Bold))
+        title.setFont(QFont("Arial", 32, QFont.Weight.Bold))
         title.setStyleSheet("color: #2196F3;")
         layout.addWidget(title)
 
-        subtitle = QLabel("Connector")
+        subtitle = QLabel("MT5 Connector")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        subtitle.setFont(QFont("Arial", 14))
+        subtitle.setFont(QFont("Arial", 16))
         subtitle.setStyleSheet("color: #888888;")
         layout.addWidget(subtitle)
 
-        layout.addSpacing(20)
+        layout.addSpacing(30)
 
         # Login form
         form_frame = QFrame()
         form_frame.setStyleSheet("""
             QFrame {
                 background-color: #2a2a2a;
-                border-radius: 8px;
-                padding: 20px;
+                border-radius: 10px;
+                padding: 25px;
             }
         """)
         form_layout = QVBoxLayout(form_frame)
-        form_layout.setSpacing(12)
+        form_layout.setSpacing(15)
 
         # Email
         email_label = QLabel("Email")
-        email_label.setStyleSheet("color: #aaaaaa; font-size: 12px;")
+        email_label.setStyleSheet("color: #aaaaaa; font-size: 14px; font-weight: bold;")
         form_layout.addWidget(email_label)
 
         self.email_input = QLineEdit()
         self.email_input.setPlaceholderText("trader@example.com")
+        self.email_input.setMinimumHeight(50)
+        self.email_input.setFont(QFont("Arial", 14))
         self.email_input.setStyleSheet(self._input_style())
         form_layout.addWidget(self.email_input)
 
         # Password
         password_label = QLabel("Password")
-        password_label.setStyleSheet("color: #aaaaaa; font-size: 12px;")
+        password_label.setStyleSheet("color: #aaaaaa; font-size: 14px; font-weight: bold;")
         form_layout.addWidget(password_label)
 
         self.password_input = QLineEdit()
         self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.password_input.setPlaceholderText("••••••••")
+        self.password_input.setMinimumHeight(50)
+        self.password_input.setFont(QFont("Arial", 14))
         self.password_input.setStyleSheet(self._input_style())
         self.password_input.returnPressed.connect(self._on_login)
         form_layout.addWidget(self.password_input)
@@ -89,7 +93,7 @@ class LoginWindow(QDialog):
         # Remember me
         self.remember_checkbox = QCheckBox("Remember me")
         self.remember_checkbox.setChecked(True)
-        self.remember_checkbox.setStyleSheet("color: #aaaaaa;")
+        self.remember_checkbox.setStyleSheet("color: #aaaaaa; font-size: 13px;")
         form_layout.addWidget(self.remember_checkbox)
 
         layout.addWidget(form_frame)
@@ -97,20 +101,23 @@ class LoginWindow(QDialog):
         # Error message
         self.error_label = QLabel("")
         self.error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.error_label.setStyleSheet("color: #f44336; font-size: 12px;")
+        self.error_label.setStyleSheet("color: #f44336; font-size: 13px;")
+        self.error_label.setWordWrap(True)
         self.error_label.hide()
         layout.addWidget(self.error_label)
 
         # Login button
         self.login_btn = QPushButton("Login")
+        self.login_btn.setMinimumHeight(50)
+        self.login_btn.setFont(QFont("Arial", 14, QFont.Weight.Bold))
         self.login_btn.setStyleSheet("""
             QPushButton {
                 background-color: #2196F3;
                 color: white;
                 border: none;
-                padding: 12px;
-                border-radius: 6px;
-                font-size: 14px;
+                padding: 15px;
+                border-radius: 8px;
+                font-size: 16px;
                 font-weight: bold;
             }
             QPushButton:hover {
@@ -128,24 +135,33 @@ class LoginWindow(QDialog):
 
         layout.addStretch()
 
+        # Server info
+        server_info = QLabel(f"Server: {get_server_url()}")
+        server_info.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        server_info.setStyleSheet("color: #555555; font-size: 11px;")
+        layout.addWidget(server_info)
+
         # Footer
-        footer = QLabel("Don't have an account? Register at forexai.com")
+        footer = QLabel("Don't have an account? Register at nusatrade.com")
         footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        footer.setStyleSheet("color: #666666; font-size: 11px;")
+        footer.setStyleSheet("color: #666666; font-size: 12px;")
         layout.addWidget(footer)
 
     def _input_style(self) -> str:
         return """
             QLineEdit {
                 background-color: #3a3a3a;
-                border: 1px solid #555555;
-                border-radius: 4px;
-                padding: 10px;
+                border: 2px solid #555555;
+                border-radius: 6px;
+                padding: 12px 15px;
                 color: white;
-                font-size: 13px;
+                font-size: 14px;
             }
             QLineEdit:focus {
                 border-color: #2196F3;
+            }
+            QLineEdit::placeholder {
+                color: #777777;
             }
         """
 

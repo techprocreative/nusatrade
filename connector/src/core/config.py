@@ -57,9 +57,9 @@ class ConfigManager:
         if config_dir is None:
             # Use AppData on Windows, ~/.config on Linux
             if os.name == "nt":
-                config_dir = Path(os.environ.get("APPDATA", ".")) / "ForexAIConnector"
+                config_dir = Path(os.environ.get("APPDATA", ".")) / "NusaTradeConnector"
             else:
-                config_dir = Path.home() / ".config" / "forexai-connector"
+                config_dir = Path.home() / ".config" / "nusatrade-connector"
         
         self.config_dir = config_dir
         self.config_path = config_dir / self.CONFIG_FILE

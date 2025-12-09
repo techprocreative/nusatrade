@@ -15,22 +15,26 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================
-# PRODUCTION SERVER CONFIGURATION
-# Hardcode your production URL here
+# SERVER CONFIGURATION
 # ============================================
-PRODUCTION_SERVER = "https://nusatrade.onrender.com"  # Render backend URL
+PRODUCTION_SERVER = "https://nusatrade.onrender.com"
 DEVELOPMENT_SERVER = "http://localhost:8000"
 
-# Set to True for production build
-USE_PRODUCTION = True
+# Set to True for production build, False for development
+USE_PRODUCTION = False  # Change to True before building release
 # ============================================
 
 
 def get_server_url() -> str:
     """Get the server URL based on environment."""
+    # Environment variable takes priority
+    env_server = os.environ.get("NUSATRADE_SERVER")
+    if env_server:
+        return env_server
+    
     if USE_PRODUCTION:
         return PRODUCTION_SERVER
-    return os.environ.get("FOREXAI_SERVER", DEVELOPMENT_SERVER)
+    return DEVELOPMENT_SERVER
 
 
 @dataclass
@@ -55,9 +59,9 @@ class AuthService:
     def _get_token_path(self) -> Path:
         """Get path to token storage file."""
         if os.name == "nt":
-            config_dir = Path(os.environ.get("APPDATA", ".")) / "ForexAIConnector"
+            config_dir = Path(os.environ.get("APPDATA", ".")) / "NusaTradeConnector"
         else:
-            config_dir = Path.home() / ".config" / "forexai-connector"
+            config_dir = Path.home() / ".config" / "nusatrade-connector"
         
         config_dir.mkdir(parents=True, exist_ok=True)
         return config_dir / self.TOKEN_FILE
@@ -228,7 +232,7 @@ class AuthService:
             ws_base = self.server_url.replace("https://", "wss://")
         else:
             ws_base = self.server_url.replace("http://", "ws://")
-        return f"{ws_base}/ws/connector"
+        return f"{ws_base}/connector/ws"
 
     def get_user_email(self) -> str:
         """Get current user email."""

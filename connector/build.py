@@ -8,7 +8,7 @@ from pathlib import Path
 
 def build():
     """Build Windows executable using PyInstaller."""
-    print("Building ForexAI Connector for Windows...")
+    print("Building NusaTrade Connector for Windows...")
 
     # Paths
     script_dir = Path(__file__).parent
@@ -20,7 +20,7 @@ def build():
     # PyInstaller command
     cmd = [
         sys.executable, "-m", "PyInstaller",
-        "--name=ForexAI-Connector",
+        "--name=NusaTrade-Connector",
         "--onefile",
         "--console",  # Changed from --windowed for debugging
         "--clean",
@@ -93,7 +93,7 @@ def build():
 
     if result.returncode == 0:
         print("\n✅ Build successful!")
-        print(f"Executable: {script_dir / 'dist' / 'ForexAI-Connector.exe'}")
+        print(f"Executable: {script_dir / 'dist' / 'NusaTrade-Connector.exe'}")
     else:
         print("\n❌ Build failed!")
         print(result.stderr)
@@ -114,7 +114,7 @@ def clean():
             print(f"Removed: {dir_path}")
 
     # Remove spec file
-    spec_file = script_dir / "ForexAI-Connector.spec"
+    spec_file = script_dir / "NusaTrade-Connector.spec"
     if spec_file.exists():
         spec_file.unlink()
         print(f"Removed: {spec_file}")

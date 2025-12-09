@@ -30,9 +30,9 @@ def setup_logging(level: str = "INFO"):
     # Log file path
     if sys.platform == "win32":
         import os
-        log_dir = Path(os.environ.get("APPDATA", ".")) / "ForexAIConnector"
+        log_dir = Path(os.environ.get("APPDATA", ".")) / "NusaTradeConnector"
     else:
-        log_dir = Path.home() / ".config" / "forexai-connector"
+        log_dir = Path.home() / ".config" / "nusatrade-connector"
     
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "connector.log"
@@ -98,7 +98,7 @@ def handle_exception(exc_type, exc_value, exc_traceback):
         # If Qt fails, write to file on Desktop
         try:
             desktop = Path(os.environ.get("USERPROFILE", "")) / "Desktop"
-            with open(desktop / "forexai_crash.txt", "w") as f:
+            with open(desktop / "nusatrade_crash.txt", "w") as f:
                 f.write(error_msg)
         except:
             pass
@@ -128,8 +128,8 @@ def main():
 
         # Create Qt application
         app = QApplication(sys.argv)
-        app.setApplicationName("ForexAI Connector")
-        app.setOrganizationName("ForexAI")
+        app.setApplicationName("NusaTrade Connector")
+        app.setOrganizationName("NusaTrade")
         
         # Apply dark theme
         setup_dark_theme(app)
