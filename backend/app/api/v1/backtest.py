@@ -260,7 +260,7 @@ def run_backtest(
     db.commit()
 
     try:
-        # Try to load data from yfinance
+        # Try to load data from database cache or download from yfinance
         import pandas as pd
         import numpy as np
         
@@ -272,11 +272,12 @@ def run_backtest(
         )
         
         try:
-            df = data_manager.load_from_yfinance()
-            logger.info(f"Loaded {len(df)} candles from yfinance for {request.symbol}")
-        except Exception as yf_error:
-            # Fallback to sample data if yfinance fails
-            logger.warning(f"Failed to load from yfinance: {yf_error}. Using sample data.")
+            # Use load_or_download: checks DB first, downloads from yfinance if not cached
+            df = data_manager.load_or_download(db)
+            logger.info(f"Loaded {len(df)} candles for {request.symbol} {request.timeframe}")
+        except Exception as data_error:
+            # Fallback to sample data if both DB and yfinance fail
+            logger.warning(f"Failed to load data: {data_error}. Using sample data.")
             n_bars = 500
             dates = pd.date_range(start=request.start_date, end=request.end_date, periods=n_bars)
             base_price = 1.0850 if "USD" in request.symbol else 100.0

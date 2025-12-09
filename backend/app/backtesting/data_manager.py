@@ -126,6 +126,67 @@ class DataManager:
         logger.info(f"Loaded {len(df)} candles from yfinance for {self.symbol} {self.timeframe}")
         return df
 
+    def save_to_db(self, db: Session, df: pd.DataFrame) -> int:
+        """Save historical data to database using upsert (INSERT ... ON CONFLICT DO UPDATE)."""
+        from app.models.backtest import HistoricalData
+        from sqlalchemy.dialects.postgresql import insert
+
+        if df.empty:
+            return 0
+
+        # Prepare records with symbol and timeframe
+        records = []
+        for _, row in df.iterrows():
+            records.append({
+                "symbol": self.symbol,
+                "timeframe": self.timeframe,
+                "timestamp": row["timestamp"],
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "close": float(row["close"]),
+                "volume": float(row["volume"]) if row.get("volume") else 0,
+            })
+
+        # PostgreSQL UPSERT - insert or update on conflict
+        stmt = insert(HistoricalData).values(records)
+        stmt = stmt.on_conflict_do_update(
+            constraint="uq_historical_data",
+            set_={
+                "open": stmt.excluded.open,
+                "high": stmt.excluded.high,
+                "low": stmt.excluded.low,
+                "close": stmt.excluded.close,
+                "volume": stmt.excluded.volume,
+            }
+        )
+        
+        db.execute(stmt)
+        db.commit()
+        
+        logger.info(f"Saved {len(records)} candles to database for {self.symbol} {self.timeframe}")
+        return len(records)
+
+    def load_or_download(self, db: Session) -> pd.DataFrame:
+        """Load from DB if exists, otherwise download from yfinance and cache."""
+        try:
+            # Try loading from database first
+            df = self.load_from_db(db)
+            logger.info(f"Cache hit: Loaded {len(df)} candles from database for {self.symbol} {self.timeframe}")
+            return df
+        except ValueError:
+            # No data in DB, download from yfinance
+            logger.info(f"Cache miss: Downloading {self.symbol} {self.timeframe} from yfinance...")
+            df = self.load_from_yfinance()
+            
+            # Save to database for future requests
+            try:
+                self.save_to_db(db, df)
+            except Exception as e:
+                logger.warning(f"Failed to cache data to database: {e}")
+            
+            return df
+
     def _normalize_columns(self, df: pd.DataFrame) -> pd.DataFrame:
         """Normalize column names to standard format."""
         column_mapping = {
