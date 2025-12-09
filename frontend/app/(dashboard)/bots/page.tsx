@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 function StatCard({ label, value, icon, color }: { 
   label: string; 
@@ -51,6 +52,7 @@ function StatCard({ label, value, icon, color }: {
 
 export default function BotsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [deleteModelId, setDeleteModelId] = useState<string | null>(null);
   const [newModel, setNewModel] = useState({
     name: "",
     model_type: "random_forest",
@@ -90,9 +92,10 @@ export default function BotsPage() {
     await trainModelMutation.mutateAsync(modelId);
   };
 
-  const handleDelete = async (modelId: string) => {
-    if (confirm("Are you sure you want to delete this model?")) {
-      await deleteModelMutation.mutateAsync(modelId);
+  const handleDelete = async () => {
+    if (deleteModelId) {
+      await deleteModelMutation.mutateAsync(deleteModelId);
+      setDeleteModelId(null);
     }
   };
 
@@ -105,7 +108,7 @@ export default function BotsPage() {
       : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -213,7 +216,7 @@ export default function BotsPage() {
                         <Button
                           size="sm"
                           variant="destructive"
-                          onClick={() => handleDelete(model.id)}
+                          onClick={() => setDeleteModelId(model.id)}
                           disabled={deleteModelMutation.isPending}
                         >
                           Delete
@@ -319,6 +322,18 @@ export default function BotsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={!!deleteModelId}
+        onOpenChange={(open) => !open && setDeleteModelId(null)}
+        title="Delete Model"
+        description="Are you sure you want to delete this model? This action cannot be undone."
+        confirmText="Delete"
+        variant="destructive"
+        onConfirm={handleDelete}
+        isLoading={deleteModelMutation.isPending}
+      />
     </div>
   );
 }

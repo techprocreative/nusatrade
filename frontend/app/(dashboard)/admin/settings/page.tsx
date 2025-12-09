@@ -10,6 +10,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, CheckCircle2, XCircle, Settings, Database, Mail, Gauge, TrendingUp, HardDrive } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 interface Setting {
   key: string;
   value: string;
@@ -69,10 +71,10 @@ export default function AdminSettingsPage() {
   const loadSettings = async (category?: string) => {
     setLoading(true);
     try {
-      const url = category 
-        ? `/api/v1/admin/settings?category=${category}`
-        : '/api/v1/admin/settings';
-      
+      const url = category
+        ? `${API_BASE_URL}/api/v1/admin/settings?category=${category}`
+        : `${API_BASE_URL}/api/v1/admin/settings`;
+
       const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -82,13 +84,13 @@ export default function AdminSettingsPage() {
       if (!response.ok) throw new Error('Failed to load settings');
 
       const data = await response.json();
-      
+
       // Convert array to object keyed by setting key
       const settingsObj = data.reduce((acc: any, setting: Setting) => {
         acc[setting.key] = setting;
         return acc;
       }, {});
-      
+
       setSettings(settingsObj);
 
       // Populate form state (non-encrypted values only)
@@ -120,7 +122,7 @@ export default function AdminSettingsPage() {
 
   const updateSetting = async (key: string, value: string, category: string, isEncrypted: boolean = false) => {
     try {
-      const response = await fetch(`/api/v1/admin/settings/${key}`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/admin/settings/${key}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -155,7 +157,7 @@ export default function AdminSettingsPage() {
   const testConnection = async (type: 'llm' | 'redis') => {
     setTesting(type);
     try {
-      const response = await fetch(`/api/v1/admin/test-${type}`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/admin/test-${type}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -348,8 +350,8 @@ export default function AdminSettingsPage() {
                     {testResults.llm.message}
                     {testResults.llm.details && (
                       <div className="mt-2 text-sm">
-                        Provider: {testResults.llm.details.provider} | 
-                        Model: {testResults.llm.details.model} | 
+                        Provider: {testResults.llm.details.provider} |
+                        Model: {testResults.llm.details.model} |
                         Response: {testResults.llm.details.response_time_ms}ms
                       </div>
                     )}
@@ -362,8 +364,8 @@ export default function AdminSettingsPage() {
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Save Changes
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => testConnection('llm')}
                   disabled={testing === 'llm'}
                 >
@@ -415,8 +417,8 @@ export default function AdminSettingsPage() {
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Save Changes
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => testConnection('redis')}
                   disabled={testing === 'redis'}
                 >

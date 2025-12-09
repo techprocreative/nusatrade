@@ -20,9 +20,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Loader2, Wifi, WifiOff, RefreshCw, Trash2, Plus } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 export default function ConnectionsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [deleteConnectionId, setDeleteConnectionId] = useState<string | null>(null);
   const [newConnection, setNewConnection] = useState({
     broker_name: "MetaTrader 5",
     account_number: "",
@@ -40,9 +42,10 @@ export default function ConnectionsPage() {
     setNewConnection({ broker_name: "MetaTrader 5", account_number: "", server: "" });
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to delete this connection?")) {
-      await deleteConnection.mutateAsync(id);
+  const handleDelete = async () => {
+    if (deleteConnectionId) {
+      await deleteConnection.mutateAsync(deleteConnectionId);
+      setDeleteConnectionId(null);
     }
   };
 
@@ -51,7 +54,7 @@ export default function ConnectionsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Broker Connections</h1>
@@ -157,8 +160,9 @@ export default function ConnectionsPage() {
                     <Button
                       size="sm"
                       variant="destructive"
-                      onClick={() => handleDelete(conn.id)}
+                      onClick={() => setDeleteConnectionId(conn.id)}
                       disabled={deleteConnection.isPending}
+                      aria-label="Delete connection"
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -231,6 +235,18 @@ export default function ConnectionsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={!!deleteConnectionId}
+        onOpenChange={(open) => !open && setDeleteConnectionId(null)}
+        title="Delete Connection"
+        description="Are you sure you want to delete this broker connection? This action cannot be undone."
+        confirmText="Delete"
+        variant="destructive"
+        onConfirm={handleDelete}
+        isLoading={deleteConnection.isPending}
+      />
     </div>
   );
 }

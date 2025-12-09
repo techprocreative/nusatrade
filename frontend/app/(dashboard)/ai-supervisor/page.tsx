@@ -74,7 +74,7 @@ export default function AISupervisorPage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-120px)]">
+    <div className="flex flex-col h-[calc(100vh-120px)] p-6">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">AI Supervisor</h1>
         <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">
