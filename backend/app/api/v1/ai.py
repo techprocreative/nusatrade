@@ -407,3 +407,233 @@ async def get_recommendations(
         "recommendations": reply,
         "generated_at": datetime.utcnow().isoformat() + "Z",
     }
+
+
+# ==================== AI STRATEGY GENERATION ====================
+
+class AIStrategyRequest(BaseModel):
+    prompt: str
+    symbol: Optional[str] = "EURUSD"
+    timeframe: Optional[str] = "H1"
+    risk_profile: Optional[str] = "moderate"  # conservative, moderate, aggressive
+    preferred_indicators: Optional[List[str]] = None
+
+
+class StrategyParameter(BaseModel):
+    name: str
+    type: str = "number"
+    default_value: str | int | float | bool
+    description: Optional[str] = None
+    min: Optional[float] = None
+    max: Optional[float] = None
+
+
+class StrategyRule(BaseModel):
+    id: str
+    condition: str
+    action: str
+    description: str
+
+
+class RiskManagement(BaseModel):
+    stop_loss_type: str = "fixed_pips"
+    stop_loss_value: float = 50
+    take_profit_type: str = "fixed_pips"
+    take_profit_value: float = 100
+    max_position_size: float = 0.1
+    max_daily_loss: Optional[float] = None
+
+
+class GeneratedStrategy(BaseModel):
+    id: str
+    name: str
+    description: str
+    strategy_type: str = "ai_generated"
+    code: str
+    parameters: List[StrategyParameter]
+    indicators: List[str]
+    entry_rules: List[StrategyRule]
+    exit_rules: List[StrategyRule]
+    risk_management: RiskManagement
+
+
+class AIStrategyResponse(BaseModel):
+    strategy: GeneratedStrategy
+    explanation: str
+    warnings: List[str]
+    suggested_improvements: List[str]
+
+
+STRATEGY_SYSTEM_PROMPT = """You are an expert algorithmic trading strategy designer. 
+When given a strategy description, you must generate a complete trading strategy in JSON format.
+
+The response MUST be valid JSON with the following structure:
+{
+    "name": "Strategy Name",
+    "description": "Brief description",
+    "code": "# Python-like pseudocode for the strategy logic",
+    "parameters": [
+        {"name": "param_name", "type": "number", "default_value": 14, "description": "Description", "min": 1, "max": 100}
+    ],
+    "indicators": ["RSI", "EMA"],
+    "entry_rules": [
+        {"id": "entry_1", "condition": "RSI < 30 AND price > EMA(20)", "action": "BUY", "description": "Buy on oversold"}
+    ],
+    "exit_rules": [
+        {"id": "exit_1", "condition": "RSI > 70 OR hit_stop_loss OR hit_take_profit", "action": "CLOSE", "description": "Exit on overbought"}
+    ],
+    "risk_management": {
+        "stop_loss_type": "fixed_pips",
+        "stop_loss_value": 30,
+        "take_profit_type": "risk_reward",
+        "take_profit_value": 60,
+        "max_position_size": 0.1,
+        "max_daily_loss": 200
+    },
+    "explanation": "Detailed explanation of the strategy logic",
+    "warnings": ["List of potential risks or limitations"],
+    "suggested_improvements": ["List of ways to improve the strategy"]
+}
+
+Consider the risk profile:
+- conservative: Lower position sizes, wider stops, higher win rate targets
+- moderate: Balanced approach
+- aggressive: Larger positions, tighter stops, higher risk/reward
+
+Always include proper risk management and realistic trading rules."""
+
+
+@router.post("/generate-strategy", response_model=AIStrategyResponse)
+async def generate_strategy(
+    request: AIStrategyRequest,
+    db: Session = Depends(deps.get_db),
+    current_user=Depends(deps.get_current_user),
+):
+    """Generate a trading strategy using AI based on natural language description."""
+    
+    # Build the prompt
+    indicators_text = ""
+    if request.preferred_indicators:
+        indicators_text = f"\nPreferred indicators to use: {', '.join(request.preferred_indicators)}"
+    
+    user_prompt = f"""Create a trading strategy based on this description:
+"{request.prompt}"
+
+Parameters:
+- Symbol: {request.symbol}
+- Timeframe: {request.timeframe}
+- Risk Profile: {request.risk_profile}
+{indicators_text}
+
+Generate a complete strategy in JSON format as specified in the system prompt.
+Return ONLY the JSON, no additional text."""
+
+    try:
+        reply, tokens = await llm_client.chat(
+            [{"role": "user", "content": user_prompt}],
+            STRATEGY_SYSTEM_PROMPT,
+        )
+        
+        # Parse the JSON response
+        import json
+        import re
+        
+        # Try to extract JSON from the response
+        json_match = re.search(r'\{[\s\S]*\}', reply)
+        if json_match:
+            strategy_data = json.loads(json_match.group())
+        else:
+            raise ValueError("No valid JSON found in response")
+        
+        # Create response
+        strategy = GeneratedStrategy(
+            id=str(uuid4()),
+            name=strategy_data.get("name", "AI Generated Strategy"),
+            description=strategy_data.get("description", request.prompt[:200]),
+            strategy_type="ai_generated",
+            code=strategy_data.get("code", "# No code generated"),
+            parameters=[
+                StrategyParameter(**p) for p in strategy_data.get("parameters", [])
+            ],
+            indicators=strategy_data.get("indicators", []),
+            entry_rules=[
+                StrategyRule(**r) for r in strategy_data.get("entry_rules", [])
+            ],
+            exit_rules=[
+                StrategyRule(**r) for r in strategy_data.get("exit_rules", [])
+            ],
+            risk_management=RiskManagement(**strategy_data.get("risk_management", {})),
+        )
+        
+        return AIStrategyResponse(
+            strategy=strategy,
+            explanation=strategy_data.get("explanation", "Strategy generated based on your description."),
+            warnings=strategy_data.get("warnings", []),
+            suggested_improvements=strategy_data.get("suggested_improvements", []),
+        )
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse AI response as JSON: {e}")
+        # Return a fallback strategy
+        return create_fallback_strategy(request)
+    except Exception as e:
+        logger.error(f"Strategy generation error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate strategy: {str(e)}"
+        )
+
+
+def create_fallback_strategy(request: AIStrategyRequest) -> AIStrategyResponse:
+    """Create a fallback strategy when AI generation fails."""
+    return AIStrategyResponse(
+        strategy=GeneratedStrategy(
+            id=str(uuid4()),
+            name=f"{request.symbol} Strategy",
+            description=request.prompt[:200],
+            strategy_type="ai_generated",
+            code="""# Fallback strategy template
+def should_buy(data):
+    rsi = calculate_rsi(data, 14)
+    ema_fast = calculate_ema(data, 9)
+    ema_slow = calculate_ema(data, 21)
+    return rsi < 30 and ema_fast > ema_slow
+
+def should_sell(data):
+    rsi = calculate_rsi(data, 14)
+    ema_fast = calculate_ema(data, 9)
+    ema_slow = calculate_ema(data, 21)
+    return rsi > 70 and ema_fast < ema_slow""",
+            parameters=[
+                StrategyParameter(name="rsi_period", type="number", default_value=14, description="RSI period"),
+                StrategyParameter(name="ema_fast", type="number", default_value=9, description="Fast EMA period"),
+                StrategyParameter(name="ema_slow", type="number", default_value=21, description="Slow EMA period"),
+            ],
+            indicators=["RSI", "EMA"],
+            entry_rules=[
+                StrategyRule(id="buy_1", condition="RSI < 30 AND EMA(9) > EMA(21)", action="BUY", description="Buy on oversold with trend"),
+                StrategyRule(id="sell_1", condition="RSI > 70 AND EMA(9) < EMA(21)", action="SELL", description="Sell on overbought with trend"),
+            ],
+            exit_rules=[
+                StrategyRule(id="exit_1", condition="hit_stop_loss OR hit_take_profit", action="CLOSE", description="Exit on SL/TP"),
+            ],
+            risk_management=RiskManagement(
+                stop_loss_type="fixed_pips",
+                stop_loss_value=50 if request.risk_profile == "moderate" else (70 if request.risk_profile == "conservative" else 30),
+                take_profit_type="risk_reward",
+                take_profit_value=100 if request.risk_profile == "moderate" else (140 if request.risk_profile == "conservative" else 60),
+                max_position_size=0.1 if request.risk_profile == "moderate" else (0.05 if request.risk_profile == "conservative" else 0.2),
+            ),
+        ),
+        explanation="This is a basic RSI + EMA crossover strategy. AI generation encountered an issue, so a template strategy was provided.",
+        warnings=[
+            "This is a fallback template strategy",
+            "AI generation was not fully successful",
+            "Please refine and test before using",
+        ],
+        suggested_improvements=[
+            "Add more confirmation indicators",
+            "Consider adding time-based filters",
+            "Test with different parameter values",
+        ],
+    )
