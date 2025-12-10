@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,29 +14,35 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useToast } from "@/hooks/use-toast";
-import apiClient from "@/lib/api-client";
+import { useUserSettings, useUpdateUserSettings, type UserSettings } from "@/hooks/api/useSettings";
+import { Loader2, User, Mail, Calendar } from "lucide-react";
 
-interface Settings {
-  defaultLotSize: string;
-  maxLotSize: string;
-  maxOpenPositions: string;
-  defaultStopLoss: string;
-  defaultTakeProfit: string;
-  riskPerTrade: string;
-  emailNotifications: boolean;
-  tradeAlerts: boolean;
-  dailySummary: boolean;
+interface Settings extends UserSettings {
   llmApiKey: string;
   llmBaseUrl: string;
   llmModel: string;
-  theme: string;
-  timezone: string;
-  language: string;
+}
+
+interface UserProfile {
+  email: string;
+  full_name: string;
+  created_at?: string;
 }
 
 export default function SettingsPage() {
-  const { toast } = useToast();
+  // Fetch settings from database
+  const { data: savedSettings, isLoading: loadingSettings } = useUserSettings();
+  const updateSettingsMutation = useUpdateUserSettings();
+
+  // User profile state
+  const [profile, setProfile] = useState<UserProfile>({
+    email: "",
+    full_name: "",
+    created_at: ""
+  });
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileName, setProfileName] = useState("");
+
   const [settings, setSettings] = useState<Settings>({
     defaultLotSize: "0.1",
     maxLotSize: "1.0",
@@ -55,27 +61,56 @@ export default function SettingsPage() {
     language: "en",
   });
 
-  const [isSaving, setIsSaving] = useState(false);
+  // Load settings from database when data is available
+  useEffect(() => {
+    if (savedSettings) {
+      setSettings(prev => ({
+        ...prev,
+        ...savedSettings,
+        // Keep sensitive fields empty if not returned
+        llmApiKey: savedSettings.llmApiKey || "",
+        llmBaseUrl: savedSettings.llmBaseUrl || "",
+        llmModel: savedSettings.llmModel || "gpt-4-turbo-preview",
+      }));
+    }
+  }, [savedSettings]);
+
+  // Fetch user profile
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const response = await fetch("/api/v1/users/me", {
+          headers: {
+            "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setProfile(data);
+          setProfileName(data.full_name || "");
+        }
+      } catch (error) {
+        console.error("Failed to fetch profile", error);
+      } finally {
+        setProfileLoading(false);
+      }
+    };
+    fetchProfile();
+  }, []);
 
   const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      await apiClient.put("/api/v1/users/settings", settings);
-      toast({
-        title: "Settings Saved",
-        description: "Your preferences have been updated successfully",
-      });
-    } catch (error: any) {
-      console.error("Failed to save settings:", error);
-      toast({
-        variant: "destructive",
-        title: "Save Failed",
-        description: error.response?.data?.detail || "Failed to save settings",
-      });
-    } finally {
-      setIsSaving(false);
-    }
+    await updateSettingsMutation.mutateAsync(settings);
   };
+
+  // Show loading state while fetching settings
+  if (loadingSettings) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        <span className="ml-2 text-slate-400">Loading settings...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-6">
@@ -88,11 +123,71 @@ export default function SettingsPage() {
 
       <Tabs defaultValue="trading" className="space-y-6">
         <TabsList className="bg-slate-800 border border-slate-700">
+          <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="trading">Trading</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="api">API Keys</TabsTrigger>
           <TabsTrigger value="display">Display</TabsTrigger>
         </TabsList>
+
+        {/* Profile Settings */}
+        <TabsContent value="profile">
+          <Card className="bg-slate-800 border-slate-700">
+            <CardHeader>
+              <CardTitle>Profile Information</CardTitle>
+              <CardDescription>
+                Manage your account details
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {profileLoading ? (
+                <div className="flex items-center justify-center h-32">
+                  <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-4 p-4 bg-slate-700/50 rounded-lg">
+                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                      <User className="w-8 h-8 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-medium text-white">{profile.full_name || "User"}</p>
+                      <p className="text-sm text-muted-foreground">{profile.email}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="fullName">Full Name</Label>
+                      <Input
+                        id="fullName"
+                        value={profileName}
+                        onChange={(e) => setProfileName(e.target.value)}
+                        placeholder="Your name"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Email Address</Label>
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-slate-300">{profile.email}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Email cannot be changed</p>
+                    </div>
+                  </div>
+
+                  {profile.created_at && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Calendar className="w-4 h-4" />
+                      <span>Member since {new Date(profile.created_at).toLocaleDateString()}</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Trading Settings */}
         <TabsContent value="trading">
@@ -428,8 +523,15 @@ export default function SettingsPage() {
 
       {/* Save Button */}
       <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={isSaving}>
-          {isSaving ? "Saving..." : "Save Settings"}
+        <Button onClick={handleSave} disabled={updateSettingsMutation.isPending}>
+          {updateSettingsMutation.isPending ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            "Save Settings"
+          )}
         </Button>
       </div>
     </div>

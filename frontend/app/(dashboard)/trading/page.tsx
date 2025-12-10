@@ -15,6 +15,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { TableSkeleton } from "@/components/loading/Skeleton";
+import { RiskManagementPanel } from "@/components/trading/RiskManagementPanel";
+import type { TrailingStopSettings } from "@/types";
 
 const TradingViewChart = dynamic(
   () => import("@/components/charts/TradingViewChart"),
@@ -30,6 +32,7 @@ export default function TradingPage() {
   const [stopLoss, setStopLoss] = useState("");
   const [takeProfit, setTakeProfit] = useState("");
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+  const [trailingStop, setTrailingStop] = useState<TrailingStopSettings | null>(null);
 
   const { data: positions = [], isLoading: loadingPositions } = usePositions();
   const { data: trades = [], isLoading: loadingTrades } = useTrades();
@@ -45,10 +48,16 @@ export default function TradingPage() {
       price: currentPrice || 1.0,
       stop_loss: stopLoss ? parseFloat(stopLoss) : undefined,
       take_profit: takeProfit ? parseFloat(takeProfit) : undefined,
+      trailing_stop: trailingStop || undefined,
     });
     setLotSize("0.1");
     setStopLoss("");
     setTakeProfit("");
+  };
+
+  const handleSLTPCalculated = (sl: number, tp: number) => {
+    setStopLoss(sl.toFixed(5));
+    setTakeProfit(tp.toFixed(5));
   };
 
   const handleClosePosition = async (positionId: string) => {
@@ -101,6 +110,24 @@ export default function TradingPage() {
                 <Label htmlFor="takeProfit">Take Profit (optional)</Label>
                 <Input id="takeProfit" type="number" step="0.00001" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} placeholder="0.00000" />
               </div>
+              
+              {/* Risk Management Panel */}
+              <RiskManagementPanel
+                symbol={symbol}
+                orderType={orderType}
+                entryPrice={currentPrice}
+                onSLTPCalculated={handleSLTPCalculated}
+                onTrailingStopChange={setTrailingStop}
+              />
+              
+              {/* Trailing Stop Indicator */}
+              {trailingStop?.enabled && (
+                <div className="text-xs p-2 bg-blue-500/10 rounded border border-blue-500/20">
+                  <span className="text-blue-400">Trailing Stop Active:</span>
+                  <span className="ml-1">Activate at {trailingStop.activation_pips} pips, trail {trailingStop.trail_distance_pips} pips</span>
+                </div>
+              )}
+              
               <Button type="submit" className="w-full" disabled={placeOrderMutation.isPending} variant={orderType === "BUY" ? "default" : "destructive"}>
                 {placeOrderMutation.isPending ? "Placing..." : `${orderType} ${symbol}`}
               </Button>

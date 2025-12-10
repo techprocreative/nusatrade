@@ -407,18 +407,108 @@ async def get_recommendations(
     db: Session = Depends(deps.get_db),
     current_user=Depends(deps.get_current_user),
 ):
-    """Get trading recommendations based on user's history."""
+    """Get trading recommendations based on user's actual trading history."""
+    from app.models.trade import Trade
+    
     # Ensure LLM client is initialized with database config
     if not llm_client._db_config_loaded:
         llm_client.reload_config(db)
     
-    # TODO: Fetch user's trade history and provide personalized recommendations
+    # Fetch user's trade history for personalized analysis
+    trades = db.query(Trade).filter(
+        Trade.user_id == current_user.id,
+        Trade.close_time.isnot(None)  # Only closed trades
+    ).order_by(Trade.close_time.desc()).limit(50).all()
     
-    prompt = """Based on general forex trading best practices, provide 3-5 actionable recommendations for improving trading performance. Focus on:
-- Risk management
-- Entry/exit timing
-- Position sizing
-- Emotional discipline"""
+    # Initialize trading analysis variables
+    trading_style = "new_trader"
+    avg_trade_duration_hours = 0
+    session_preferences = {"asian": 0, "london": 0, "new_york": 0}
+    win_rate = 0
+    total_profit = 0
+    
+    # Calculate trading statistics
+    if trades:
+        total_trades = len(trades)
+        winning_trades = [t for t in trades if t.profit and float(t.profit) > 0]
+        losing_trades = [t for t in trades if t.profit and float(t.profit) < 0]
+        
+        win_rate = (len(winning_trades) / total_trades * 100) if total_trades > 0 else 0
+        total_profit = sum(float(t.profit or 0) for t in trades)
+        
+        avg_win = (sum(float(t.profit) for t in winning_trades) / len(winning_trades)) if winning_trades else 0
+        avg_loss = (sum(float(t.profit) for t in losing_trades) / len(losing_trades)) if losing_trades else 0
+        
+        # Get most traded symbols
+        symbol_counts = {}
+        for t in trades:
+            symbol_counts[t.symbol] = symbol_counts.get(t.symbol, 0) + 1
+        top_symbols = sorted(symbol_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+        
+        # Get trade direction preference
+        buy_trades = [t for t in trades if t.trade_type == "BUY"]
+        sell_trades = [t for t in trades if t.trade_type == "SELL"]
+        
+        # === NEW: Calculate trade duration and trading style ===
+        trade_durations = []
+        for t in trades:
+            if t.open_time and t.close_time:
+                duration = (t.close_time - t.open_time).total_seconds() / 3600  # hours
+                trade_durations.append(duration)
+        
+        if trade_durations:
+            avg_trade_duration_hours = sum(trade_durations) / len(trade_durations)
+            
+            # Classify trading style based on average trade duration
+            if avg_trade_duration_hours < 1:
+                trading_style = "scalper"
+            elif avg_trade_duration_hours < 24:
+                trading_style = "day_trader"
+            else:
+                trading_style = "swing_trader"
+        
+        # === NEW: Calculate session preferences ===
+        for t in trades:
+            if t.open_time:
+                hour = t.open_time.hour
+                # Asian session: 00:00-08:00 UTC
+                if 0 <= hour < 8:
+                    session_preferences["asian"] += 1
+                # London session: 08:00-16:00 UTC
+                elif 8 <= hour < 16:
+                    session_preferences["london"] += 1
+                # New York session: 13:00-21:00 UTC (overlap with London)
+                elif 13 <= hour < 21:
+                    session_preferences["new_york"] += 1
+        
+        trade_history_context = f"""
+USER'S TRADING HISTORY (Last {total_trades} closed trades):
+- Win Rate: {win_rate:.1f}%
+- Total P/L: ${total_profit:.2f}
+- Average Win: ${avg_win:.2f}
+- Average Loss: ${avg_loss:.2f}
+- Risk:Reward Ratio: {abs(avg_win/avg_loss):.2f}:1 (based on averages)
+- Most Traded: {', '.join([f'{s[0]} ({s[1]} trades)' for s in top_symbols])}
+- Direction Preference: {len(buy_trades)} BUY / {len(sell_trades)} SELL trades
+- Trading Style: {trading_style} (avg duration: {avg_trade_duration_hours:.1f} hours)
+- Session Preferences: Asian: {session_preferences['asian']}, London: {session_preferences['london']}, NY: {session_preferences['new_york']}
+"""
+    else:
+        trade_history_context = """
+USER'S TRADING HISTORY:
+- No closed trades yet (new trader)
+"""
+    
+    prompt = f"""{trade_history_context}
+
+Based on this trading history, provide 3-5 specific, actionable recommendations to improve trading performance. Focus on:
+1. Risk management adjustments based on actual win rate
+2. Position sizing optimization
+3. Entry/exit timing improvements
+4. Symbol selection guidance
+5. Emotional discipline tips
+
+Be specific and reference the actual statistics above where relevant."""
 
     reply, _ = await llm_client.chat(
         [{"role": "user", "content": prompt}],
@@ -427,6 +517,14 @@ async def get_recommendations(
 
     return {
         "recommendations": reply,
+        "trade_stats": {
+            "total_trades": len(trades) if trades else 0,
+            "win_rate": win_rate if trades else 0,
+            "total_pnl": total_profit if trades else 0,
+        },
+        "trading_style": trading_style,
+        "avg_trade_duration_hours": round(avg_trade_duration_hours, 1),
+        "session_preferences": session_preferences,
         "generated_at": datetime.utcnow().isoformat() + "Z",
     }
 
@@ -457,12 +555,33 @@ class StrategyRule(BaseModel):
     description: str
 
 
+class TrailingStopConfig(BaseModel):
+    """Trailing stop configuration for strategies."""
+    enabled: bool = False
+    trailing_type: str = "atr_based"  # fixed_pips, atr_based, percentage
+    activation_pips: float = 20.0
+    trail_distance_pips: float = 15.0
+    atr_multiplier: float = 1.5
+    breakeven_enabled: bool = True
+    breakeven_pips: float = 15.0
+
+
 class RiskManagement(BaseModel):
-    stop_loss_type: str = "fixed_pips"
-    stop_loss_value: float = 50
-    take_profit_type: str = "fixed_pips"
-    take_profit_value: float = 100
+    """Risk management configuration for strategies."""
+    # Stop Loss
+    stop_loss_type: str = "atr_based"
+    stop_loss_value: float = 2.0
+    
+    # Take Profit
+    take_profit_type: str = "risk_reward"
+    take_profit_value: float = 2.0
+    
+    # Trailing Stop
+    trailing_stop: Optional[TrailingStopConfig] = None
+    
+    # Position Sizing
     max_position_size: float = 0.1
+    risk_per_trade_percent: float = 2.0
     max_daily_loss: Optional[float] = None
 
 
@@ -505,11 +624,21 @@ The response MUST be valid JSON with the following structure:
         {"id": "exit_1", "condition": "RSI > 70 OR hit_stop_loss OR hit_take_profit", "action": "CLOSE", "description": "Exit on overbought"}
     ],
     "risk_management": {
-        "stop_loss_type": "fixed_pips",
-        "stop_loss_value": 30,
+        "stop_loss_type": "atr_based",
+        "stop_loss_value": 2.0,
         "take_profit_type": "risk_reward",
-        "take_profit_value": 60,
+        "take_profit_value": 2.0,
+        "trailing_stop": {
+            "enabled": true,
+            "trailing_type": "atr_based",
+            "activation_pips": 20,
+            "trail_distance_pips": 15,
+            "atr_multiplier": 1.5,
+            "breakeven_enabled": true,
+            "breakeven_pips": 15
+        },
         "max_position_size": 0.1,
+        "risk_per_trade_percent": 2.0,
         "max_daily_loss": 200
     },
     "explanation": "Detailed explanation of the strategy logic",
@@ -517,12 +646,22 @@ The response MUST be valid JSON with the following structure:
     "suggested_improvements": ["List of ways to improve the strategy"]
 }
 
-Consider the risk profile:
-- conservative: Lower position sizes, wider stops, higher win rate targets
-- moderate: Balanced approach
-- aggressive: Larger positions, tighter stops, higher risk/reward
+Risk management field descriptions:
+- stop_loss_type: "fixed_pips", "atr_based", or "percentage"
+- stop_loss_value: For atr_based, this is the ATR multiplier (e.g., 2.0 means 2x ATR)
+- take_profit_type: "fixed_pips", "risk_reward", or "atr_based"
+- take_profit_value: For risk_reward, this is the R:R ratio (e.g., 2.0 means 2:1 reward:risk)
+- trailing_stop.enabled: Whether to use trailing stop
+- trailing_stop.trailing_type: "fixed_pips", "atr_based", or "percentage"
+- trailing_stop.activation_pips: Pips of profit before trailing starts
+- trailing_stop.breakeven_enabled: Move SL to breakeven after breakeven_pips profit
 
-Always include proper risk management and realistic trading rules."""
+Consider the risk profile:
+- conservative: ATR-based SL (2.5x), R:R 1.5:1, trailing enabled, lower position sizes (0.05)
+- moderate: ATR-based SL (2.0x), R:R 2:1, trailing enabled, moderate position sizes (0.1)
+- aggressive: ATR-based SL (1.5x), R:R 3:1, trailing enabled, larger position sizes (0.2)
+
+Always include trailing stop for trend-following strategies. Use fixed_pips for scalping strategies."""
 
 
 @router.post("/generate-strategy", response_model=AIStrategyResponse)
@@ -644,14 +783,24 @@ def should_sell(data):
                 StrategyRule(id="exit_1", condition="hit_stop_loss OR hit_take_profit", action="CLOSE", description="Exit on SL/TP"),
             ],
             risk_management=RiskManagement(
-                stop_loss_type="fixed_pips",
-                stop_loss_value=50 if request.risk_profile == "moderate" else (70 if request.risk_profile == "conservative" else 30),
+                stop_loss_type="atr_based",
+                stop_loss_value=2.0 if request.risk_profile == "moderate" else (2.5 if request.risk_profile == "conservative" else 1.5),
                 take_profit_type="risk_reward",
-                take_profit_value=100 if request.risk_profile == "moderate" else (140 if request.risk_profile == "conservative" else 60),
+                take_profit_value=2.0 if request.risk_profile == "moderate" else (1.5 if request.risk_profile == "conservative" else 3.0),
+                trailing_stop=TrailingStopConfig(
+                    enabled=True,
+                    trailing_type="atr_based",
+                    activation_pips=20 if request.risk_profile == "moderate" else (30 if request.risk_profile == "conservative" else 10),
+                    trail_distance_pips=15,
+                    atr_multiplier=1.5,
+                    breakeven_enabled=True,
+                    breakeven_pips=15 if request.risk_profile == "moderate" else (20 if request.risk_profile == "conservative" else 10),
+                ),
                 max_position_size=0.1 if request.risk_profile == "moderate" else (0.05 if request.risk_profile == "conservative" else 0.2),
+                risk_per_trade_percent=2.0 if request.risk_profile == "moderate" else (1.0 if request.risk_profile == "conservative" else 3.0),
             ),
         ),
-        explanation="This is a basic RSI + EMA crossover strategy. AI generation encountered an issue, so a template strategy was provided.",
+        explanation="This is a basic RSI + EMA crossover strategy with ATR-based risk management and trailing stop. AI generation encountered an issue, so a template strategy was provided.",
         warnings=[
             "This is a fallback template strategy",
             "AI generation was not fully successful",

@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, CheckCircle2, XCircle, Settings, Database, Mail, Gauge, TrendingUp, HardDrive } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, Settings, Database, Mail, Gauge, TrendingUp, HardDrive, KeyRound } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -33,6 +33,7 @@ export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, TestResult>>({});
+  const [configuredSecrets, setConfiguredSecrets] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   // Form state for each category
@@ -93,8 +94,17 @@ export default function AdminSettingsPage() {
 
       setSettings(settingsObj);
 
-      // Populate form state (non-encrypted values only)
+      // Track which encrypted secrets are configured
+      const secrets = new Set<string>();
+      
+      // Populate form state
       data.forEach((setting: Setting) => {
+        // Track encrypted settings that have values (shown as ***ENCRYPTED***)
+        if (setting.is_encrypted && setting.value === '***ENCRYPTED***') {
+          secrets.add(setting.key);
+        }
+        
+        // Populate non-encrypted values
         if (!setting.is_encrypted && setting.value) {
           if (setting.category === 'ai_provider') {
             setAiProvider(prev => ({ ...prev, [setting.key]: setting.value }));
@@ -109,6 +119,8 @@ export default function AdminSettingsPage() {
           }
         }
       });
+      
+      setConfiguredSecrets(secrets);
     } catch (error) {
       toast({
         title: 'Error',
@@ -300,16 +312,26 @@ export default function AdminSettingsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="llm_api_key">API Key *</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="llm_api_key">API Key *</Label>
+                  {configuredSecrets.has('llm_api_key') && (
+                    <span className="flex items-center gap-1 text-xs text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded">
+                      <KeyRound className="h-3 w-3" />
+                      Configured
+                    </span>
+                  )}
+                </div>
                 <Input
                   id="llm_api_key"
                   type="password"
-                  placeholder="sk-..."
+                  placeholder={configuredSecrets.has('llm_api_key') ? "••••••••••••••••" : "sk-..."}
                   value={aiProvider.llm_api_key}
                   onChange={(e) => setAiProvider({ ...aiProvider, llm_api_key: e.target.value })}
                 />
                 <p className="text-sm text-muted-foreground">
-                  API key for your LLM provider (encrypted in database)
+                  {configuredSecrets.has('llm_api_key') 
+                    ? "API key is configured. Enter a new value to update it."
+                    : "API key for your LLM provider (encrypted in database)"}
                 </p>
               </div>
 
@@ -388,16 +410,26 @@ export default function AdminSettingsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="redis_url">Redis URL *</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="redis_url">Redis URL *</Label>
+                  {configuredSecrets.has('redis_url') && (
+                    <span className="flex items-center gap-1 text-xs text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded">
+                      <KeyRound className="h-3 w-3" />
+                      Configured
+                    </span>
+                  )}
+                </div>
                 <Input
                   id="redis_url"
                   type="password"
-                  placeholder="redis://default:password@host:6379"
+                  placeholder={configuredSecrets.has('redis_url') ? "••••••••••••••••" : "redis://default:password@host:6379"}
                   value={redis.redis_url}
                   onChange={(e) => setRedis({ ...redis, redis_url: e.target.value })}
                 />
                 <p className="text-sm text-muted-foreground">
-                  Redis connection string (encrypted in database)
+                  {configuredSecrets.has('redis_url')
+                    ? "Redis URL is configured. Enter a new value to update it."
+                    : "Redis connection string (encrypted in database)"}
                 </p>
               </div>
 
@@ -451,11 +483,19 @@ export default function AdminSettingsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="sendgrid_api_key">SendGrid API Key</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="sendgrid_api_key">SendGrid API Key</Label>
+                  {configuredSecrets.has('sendgrid_api_key') && (
+                    <span className="flex items-center gap-1 text-xs text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded">
+                      <KeyRound className="h-3 w-3" />
+                      Configured
+                    </span>
+                  )}
+                </div>
                 <Input
                   id="sendgrid_api_key"
                   type="password"
-                  placeholder="SG...."
+                  placeholder={configuredSecrets.has('sendgrid_api_key') ? "••••••••••••••••" : "SG...."}
                   value={email.sendgrid_api_key}
                   onChange={(e) => setEmail({ ...email, sendgrid_api_key: e.target.value })}
                 />

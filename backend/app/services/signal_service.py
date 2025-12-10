@@ -112,7 +112,11 @@ def update_signal_status(
     
     if executed_trade_id and new_status == SignalStatus.EXECUTED:
         # Store reference to the executed trade
-        pass  # TODO: Add executed_trade_id field to Signal model
+        try:
+            signal.executed_trade_id = UUID(executed_trade_id)
+            signal.executed_at = datetime.utcnow()
+        except ValueError:
+            logger.warning(f"Invalid executed_trade_id format: {executed_trade_id}")
     
     db.commit()
     db.refresh(signal)

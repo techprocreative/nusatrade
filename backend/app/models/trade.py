@@ -65,4 +65,7 @@ class Signal(Base):
     stop_loss = Column(Numeric(20, 5))
     take_profit = Column(Numeric(20, 5))
     status = Column(String(50), default="pending")
+    # Reference to the trade that was executed from this signal
+    executed_trade_id = Column(UUID(as_uuid=True), ForeignKey("trades.id"), nullable=True)
+    executed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

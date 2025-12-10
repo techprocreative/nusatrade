@@ -51,6 +51,16 @@ export interface Trade {
   close_time: string;
 }
 
+export interface TrailingStopSettings {
+  enabled: boolean;
+  trailing_type: 'fixed_pips' | 'atr_based' | 'percentage';
+  activation_pips: number;
+  trail_distance_pips: number;
+  atr_multiplier: number;
+  breakeven_enabled: boolean;
+  breakeven_pips: number;
+}
+
 export interface OrderCreate {
   symbol: string;
   order_type: 'BUY' | 'SELL';
@@ -59,6 +69,39 @@ export interface OrderCreate {
   stop_loss?: number;
   take_profit?: number;
   connection_id?: string;
+  use_atr_sl?: boolean;
+  sl_atr_multiplier?: number;
+  tp_risk_reward?: number;
+  trailing_stop?: TrailingStopSettings;
+}
+
+export interface CalculateSLTPRequest {
+  symbol: string;
+  direction: 'BUY' | 'SELL';
+  entry_price: number;
+  sl_type: 'fixed_pips' | 'atr_based' | 'percentage';
+  sl_value: number;
+  tp_type: 'fixed_pips' | 'risk_reward' | 'atr_based';
+  tp_value: number;
+  atr?: number;
+}
+
+export interface CalculateSLTPResponse {
+  stop_loss: number;
+  take_profit: number;
+  sl_distance_pips: number;
+  tp_distance_pips: number;
+  risk_reward_ratio: number;
+}
+
+export interface RiskProfile {
+  sl_type: string;
+  sl_value: number;
+  tp_type: string;
+  tp_value: number;
+  risk_per_trade_percent: number;
+  max_position_size: number;
+  trailing_stop: TrailingStopSettings | null;
 }
 
 // ML Model types
@@ -182,9 +225,11 @@ export interface StrategyRule {
 export interface RiskManagement {
   stop_loss_type: 'fixed_pips' | 'atr_based' | 'percentage';
   stop_loss_value: number;
-  take_profit_type: 'fixed_pips' | 'risk_reward' | 'trailing';
+  take_profit_type: 'fixed_pips' | 'risk_reward' | 'atr_based';
   take_profit_value: number;
+  trailing_stop?: TrailingStopSettings;
   max_position_size: number;
+  risk_per_trade_percent?: number;
   max_daily_loss?: number;
 }
 

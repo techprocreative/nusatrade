@@ -249,9 +249,12 @@ class MessageHandler:
         self.mt5 = mt5_service
         self.handlers: Dict[str, Callable] = {
             "PING": self._handle_ping,
+            "TRADE_COMMAND": self._handle_trade_command,
             "TRADE_OPEN": self._handle_trade_open,
             "TRADE_CLOSE": self._handle_trade_close,
             "TRADE_MODIFY": self._handle_trade_modify,
+            "UPDATE_SL": self._handle_update_sl,
+            "MOVE_BREAKEVEN": self._handle_move_breakeven,
             "SYNC_REQUEST": self._handle_sync,
             "GET_POSITIONS": self._handle_get_positions,
             "GET_ACCOUNT": self._handle_get_account,
@@ -275,35 +278,65 @@ class MessageHandler:
     def _handle_ping(self, msg: Dict) -> Dict:
         return {"type": "PONG", "timestamp": datetime.now().isoformat()}
 
+    def _handle_trade_command(self, msg: Dict) -> Dict:
+        """Handle unified TRADE_COMMAND from backend client WebSocket.
+        
+        Routes to appropriate handler based on action field.
+        Supports: OPEN, BUY, SELL, CLOSE, MODIFY
+        """
+        action = msg.get("action", "").upper()
+        
+        if action in ("OPEN", "BUY", "SELL"):
+            # Map action to order_type if not specified
+            if action in ("BUY", "SELL"):
+                msg["order_type"] = action
+            return self._handle_trade_open(msg)
+        elif action == "CLOSE":
+            return self._handle_trade_close(msg)
+        elif action == "MODIFY":
+            return self._handle_trade_modify(msg)
+        else:
+            return {
+                "type": "TRADE_RESULT",
+                "request_id": msg.get("id") or msg.get("request_id"),
+                "success": False,
+                "error": f"Unknown action: {action}. Supported: OPEN, BUY, SELL, CLOSE, MODIFY",
+            }
+
     def _handle_trade_open(self, msg: Dict) -> Dict:
         """Handle trade open command."""
+        # Accept both lot_size and volume for compatibility
+        volume = msg.get("lot_size") or msg.get("volume", 0.1)
         result = self.mt5.open_order(
             symbol=msg.get("symbol"),
             order_type=msg.get("order_type"),
-            lot_size=msg.get("lot_size", 0.1),
+            volume=volume,
             stop_loss=msg.get("stop_loss"),
             take_profit=msg.get("take_profit"),
-            comment=msg.get("comment", "ForexAI"),
+            comment=msg.get("comment", "NusaTrade"),
         )
         return {
             "type": "TRADE_RESULT",
             "request_id": msg.get("request_id"),
             "success": result.success if result else False,
-            "ticket": result.order if result else None,
-            "error": result.error_message if result else "Unknown error",
+            "ticket": result.ticket if result else None,
+            "error": result.message if result and not result.success else None,
         }
 
     def _handle_trade_close(self, msg: Dict) -> Dict:
         """Handle trade close command."""
+        # Accept both lot_size and volume for compatibility
+        volume = msg.get("lot_size") or msg.get("volume")
         result = self.mt5.close_position(
             ticket=msg.get("ticket"),
-            lot_size=msg.get("lot_size"),
+            volume=volume,
         )
         return {
             "type": "TRADE_RESULT",
             "request_id": msg.get("request_id"),
             "success": result.success if result else False,
-            "profit": result.profit if result else 0,
+            "price": result.price if result else 0,
+            "error": result.message if result and not result.success else None,
         }
 
     def _handle_trade_modify(self, msg: Dict) -> Dict:
@@ -316,7 +349,82 @@ class MessageHandler:
         return {
             "type": "TRADE_RESULT",
             "request_id": msg.get("request_id"),
-            "success": result,
+            "success": result.success if result else False,
+            "error": result.message if result and not result.success else None,
+        }
+
+    def _handle_update_sl(self, msg: Dict) -> Dict:
+        """Handle stop loss update command."""
+        ticket = msg.get("ticket")
+        new_sl = msg.get("stop_loss") or msg.get("new_sl")
+        
+        if not ticket or new_sl is None:
+            return {
+                "type": "TRADE_RESULT",
+                "request_id": msg.get("request_id"),
+                "success": False,
+                "error": "Missing ticket or stop_loss",
+            }
+        
+        result = self.mt5.modify_position(
+            ticket=ticket,
+            stop_loss=new_sl,
+        )
+        return {
+            "type": "TRADE_RESULT",
+            "request_id": msg.get("request_id"),
+            "success": result.success if result else False,
+            "new_sl": new_sl if result and result.success else None,
+            "error": result.message if result and not result.success else None,
+        }
+
+    def _handle_move_breakeven(self, msg: Dict) -> Dict:
+        """Handle move to breakeven command."""
+        ticket = msg.get("ticket")
+        offset_pips = msg.get("offset_pips", 2.0)
+        
+        if not ticket:
+            return {
+                "type": "TRADE_RESULT",
+                "request_id": msg.get("request_id"),
+                "success": False,
+                "error": "Missing ticket",
+            }
+        
+        # Get position to find entry price and direction
+        positions = self.mt5.get_positions()
+        position = None
+        for pos in (positions or []):
+            if pos.ticket == ticket:
+                position = pos
+                break
+        
+        if not position:
+            return {
+                "type": "TRADE_RESULT",
+                "request_id": msg.get("request_id"),
+                "success": False,
+                "error": f"Position {ticket} not found",
+            }
+        
+        # Calculate breakeven SL
+        offset = offset_pips * 0.0001
+        if position.order_type == "BUY":
+            new_sl = position.open_price + offset
+        else:
+            new_sl = position.open_price - offset
+        
+        result = self.mt5.modify_position(
+            ticket=ticket,
+            stop_loss=new_sl,
+        )
+        return {
+            "type": "TRADE_RESULT",
+            "request_id": msg.get("request_id"),
+            "success": result.success if result else False,
+            "new_sl": new_sl if result and result.success else None,
+            "breakeven": True,
+            "error": result.message if result and not result.success else None,
         }
 
     def _handle_sync(self, msg: Dict) -> Dict:

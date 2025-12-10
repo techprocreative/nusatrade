@@ -192,14 +192,14 @@ export function StrategyPreview({ response, onSaved, onClear }: StrategyPreviewP
         <CardHeader className="pb-3">
           <CardTitle className="text-sm">Risk Management</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <p className="text-xs text-slate-400">Stop Loss</p>
               <p className="font-semibold">
                 {strategy.risk_management.stop_loss_value}{' '}
                 <span className="text-xs text-slate-400">
-                  ({strategy.risk_management.stop_loss_type})
+                  ({strategy.risk_management.stop_loss_type === 'atr_based' ? 'ATR x' : strategy.risk_management.stop_loss_type})
                 </span>
               </p>
             </div>
@@ -208,7 +208,7 @@ export function StrategyPreview({ response, onSaved, onClear }: StrategyPreviewP
               <p className="font-semibold">
                 {strategy.risk_management.take_profit_value}{' '}
                 <span className="text-xs text-slate-400">
-                  ({strategy.risk_management.take_profit_type})
+                  ({strategy.risk_management.take_profit_type === 'risk_reward' ? 'R:R' : strategy.risk_management.take_profit_type})
                 </span>
               </p>
             </div>
@@ -216,13 +216,56 @@ export function StrategyPreview({ response, onSaved, onClear }: StrategyPreviewP
               <p className="text-xs text-slate-400">Max Position Size</p>
               <p className="font-semibold">{strategy.risk_management.max_position_size} lots</p>
             </div>
-            {strategy.risk_management.max_daily_loss && (
+            {strategy.risk_management.risk_per_trade_percent && (
               <div>
-                <p className="text-xs text-slate-400">Max Daily Loss</p>
-                <p className="font-semibold">${strategy.risk_management.max_daily_loss}</p>
+                <p className="text-xs text-slate-400">Risk Per Trade</p>
+                <p className="font-semibold">{strategy.risk_management.risk_per_trade_percent}%</p>
               </div>
             )}
           </div>
+          
+          {/* Trailing Stop Section */}
+          {strategy.risk_management.trailing_stop && (
+            <div className="p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
+              <div className="flex items-center gap-2 mb-2">
+                <div className={`w-2 h-2 rounded-full ${strategy.risk_management.trailing_stop.enabled ? 'bg-green-500' : 'bg-slate-500'}`} />
+                <p className="text-sm font-medium text-blue-400">
+                  Trailing Stop {strategy.risk_management.trailing_stop.enabled ? 'Enabled' : 'Disabled'}
+                </p>
+              </div>
+              {strategy.risk_management.trailing_stop.enabled && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <p className="text-slate-400">Type</p>
+                    <p className="text-white">{strategy.risk_management.trailing_stop.trailing_type}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400">Activation</p>
+                    <p className="text-white">{strategy.risk_management.trailing_stop.activation_pips} pips</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400">Trail Distance</p>
+                    <p className="text-white">{strategy.risk_management.trailing_stop.trail_distance_pips} pips</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400">Breakeven</p>
+                    <p className="text-white">
+                      {strategy.risk_management.trailing_stop.breakeven_enabled 
+                        ? `${strategy.risk_management.trailing_stop.breakeven_pips} pips` 
+                        : 'Disabled'}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          
+          {strategy.risk_management.max_daily_loss && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-slate-400">Max Daily Loss:</span>
+              <span className="text-red-400 font-semibold">${strategy.risk_management.max_daily_loss}</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 

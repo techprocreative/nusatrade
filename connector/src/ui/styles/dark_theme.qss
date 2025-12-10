@@ -1,12 +1,245 @@
+/* Global Styles */
 QWidget {
-    background-color: #0f172a;
-    color: #e2e8f0;
+    background-color: #1a1a2e;
+    color: #ffffff;
     font-family: "Segoe UI";
+    font-size: 13px;
 }
 
-QPushButton {
-    background-color: #1e293b;
-    border: 1px solid #334155;
-    padding: 8px 12px;
+/* Main Window Specifics */
+QMainWindow {
+    background-color: #1a1a2e;
+}
+
+/* Tab Widget */
+QTabWidget::pane {
+    border: 1px solid #3a3a5a;
+    border-radius: 8px;
+    background-color: #16213e;
+}
+
+QTabBar::tab {
+    background-color: #16213e;
+    color: #7f8c8d;
+    padding: 10px 20px;
+    margin-right: 4px;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+}
+
+QTabBar::tab:selected {
+    background-color: #1a1a2e;
+    color: #4fc3f7;
+    border-bottom: 2px solid #4fc3f7;
+}
+
+/* Group Box */
+QGroupBox {
+    font-weight: bold;
+    font-size: 13px;
+    border: 2px solid #3a3a5a;
+    border-radius: 8px;
+    margin-top: 12px;
+    padding-top: 16px; /* Increased padding to prevent overlap with title */
+    background-color: #16213e;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 16px;
+    padding: 0 8px;
+    color: #4fc3f7;
+}
+
+/* Inputs */
+QLineEdit, QSpinBox {
+    background-color: #1a1a2e;
+    border: 2px solid #3a3a5a;
     border-radius: 6px;
+    padding: 8px 12px;
+    color: #ffffff;
+    font-size: 13px;
+    min-height: 20px;
+}
+
+QLineEdit:focus, QSpinBox:focus {
+    border-color: #4fc3f7;
+}
+
+QLineEdit::placeholder {
+    color: #5a5a7a;
+}
+
+QTextEdit {
+    background-color: #1a1a2e;
+    border: 2px solid #3a3a5a;
+    border-radius: 6px;
+    color: #ffffff;
+    padding: 8px;
+}
+
+/* ComboBox */
+QComboBox {
+    background-color: #1a1a2e;
+    border: 2px solid #3a3a5a;
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: #ffffff;
+    min-height: 20px;
+}
+
+QComboBox::drop-down {
+    border: none;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #16213e;
+    color: #ffffff;
+    selection-background-color: #4fc3f7;
+    border: 1px solid #3a3a5a;
+}
+
+/* CheckBox */
+QCheckBox {
+    color: #b0b0b0;
+    spacing: 8px;
+}
+
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+}
+
+QCheckBox::indicator:unchecked {
+    border: 2px solid #4a4a6a;
+    border-radius: 4px;
+    background-color: transparent;
+}
+
+QCheckBox::indicator:checked {
+    border: 2px solid #4fc3f7;
+    border-radius: 4px;
+    background-color: #4fc3f7;
+}
+
+/* Status Bar */
+QStatusBar {
+    background-color: #16213e;
+    color: #7f8c8d;
+}
+
+/* Buttons */
+QPushButton {
+    border: none;
+    border-radius: 6px;
+    font-weight: bold;
+    padding: 8px 16px;
+}
+
+QPushButton:disabled {
+    background-color: #3a3a5a;
+    color: #6a6a8a;
+}
+
+/* Specific Button Classes (to be assigned via setObjectName or property) */
+QPushButton[class="primary"] {
+    background-color: #27ae60;
+    color: white;
+}
+QPushButton[class="primary"]:hover {
+    background-color: #2ecc71;
+}
+
+QPushButton[class="danger"] {
+    background-color: #e74c3c;
+    color: white;
+}
+QPushButton[class="danger"]:hover {
+    background-color: #c0392b;
+}
+
+QPushButton[class="info"] {
+    background-color: #3498db;
+    color: white;
+}
+QPushButton[class="info"]:hover {
+    background-color: #2980b9;
+}
+
+QPushButton[class="warning"] {
+    background-color: #e67e22;
+    color: white;
+}
+QPushButton[class="warning"]:hover {
+    background-color: #d35400;
+}
+
+QPushButton[class="secondary"] {
+    background-color: #7f8c8d;
+    color: white;
+}
+QPushButton[class="secondary"]:hover {
+    background-color: #95a5a6;
+}
+
+QPushButton[class="login"] {
+    background-color: #4fc3f7;
+    color: #1a1a2e;
+}
+QPushButton[class="login"]:hover {
+    background-color: #81d4fa;
+}
+QPushButton[class="login"]:pressed {
+    background-color: #29b6f6;
+}
+
+/* Login Window Specifics */
+QDialog {
+    background-color: #1a1a2e;
+}
+
+QLabel#LoginTitle {
+    color: #4fc3f7;
+    margin-bottom: 0px;
+    font-weight: bold;
+    font-size: 32px;
+}
+
+QLabel#LoginSubtitle {
+    color: #7f8c8d;
+    margin-top: 0px;
+    font-size: 14px;
+}
+
+QFrame#LoginContainer {
+    background-color: #16213e;
+    border-radius: 12px;
+}
+
+QLabel#InputLabel {
+    color: #b0b0b0;
+    margin-bottom: 4px;
+    font-weight: bold;
+    font-size: 11px;
+}
+
+QLabel#ErrorLabel {
+    color: #e74c3c;
+    margin-top: 8px;
+    font-size: 11px;
+}
+
+/* Status Indicators */
+QFrame#StatusFrame {
+    background-color: #16213e;
+    border-radius: 8px;
+    padding: 8px;
+}
+
+/* Detected Info GroupBox */
+QGroupBox#DetectedGroup {
+    border-color: #27ae60;
+}
+QGroupBox#DetectedGroup::title {
+    color: #27ae60;
 }

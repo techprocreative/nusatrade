@@ -301,7 +301,15 @@ def make_prediction(
     db: Session = Depends(deps.get_db),
     current_user=Depends(deps.get_current_user),
 ):
-    """Generate a prediction using a trained model."""
+    """Generate a prediction using a trained model with SL/TP recommendations."""
+    from app.services.risk_management import (
+        calculate_sl_tp,
+        get_risk_config,
+        RiskConfig,
+        SLType,
+        TPType,
+    )
+    
     model = db.query(MLModel).filter(
         MLModel.id == model_id,
         MLModel.user_id == current_user.id,
@@ -320,13 +328,62 @@ def make_prediction(
     import random
     direction = random.choice(["BUY", "SELL", "HOLD"])
     confidence = round(random.uniform(0.5, 0.95), 2)
+    
+    # Generate a realistic entry price based on symbol
+    # In production, this would come from live market data
+    entry_prices = {
+        "EURUSD": 1.0850,
+        "GBPUSD": 1.2650,
+        "USDJPY": 149.50,
+        "AUDUSD": 0.6550,
+        "USDCAD": 1.3650,
+        "XAUUSD": 2050.00,
+    }
+    entry_price = entry_prices.get(request.symbol.upper(), 1.0000)
+    # Add small random variation
+    entry_price = round(entry_price * (1 + random.uniform(-0.001, 0.001)), 5)
+    
+    # Calculate SL/TP based on risk profile from model config or default
+    risk_profile = model.config.get("risk_profile", "moderate") if model.config else "moderate"
+    risk_config = get_risk_config(risk_profile)
+    
+    # For simplicity, use estimated ATR based on symbol volatility
+    estimated_atr = {
+        "EURUSD": 0.0008,
+        "GBPUSD": 0.0012,
+        "USDJPY": 0.80,
+        "AUDUSD": 0.0007,
+        "USDCAD": 0.0009,
+        "XAUUSD": 15.0,
+    }.get(request.symbol.upper(), 0.0010)
+    
+    stop_loss = None
+    take_profit = None
+    
+    if direction != "HOLD":
+        stop_loss, take_profit = calculate_sl_tp(
+            entry_price=entry_price,
+            direction=direction,
+            config=risk_config,
+            atr=estimated_atr,
+        )
 
     prediction_data = {
         "direction": direction,
         "confidence": confidence,
-        "entry_price": None,
-        "stop_loss": None,
-        "take_profit": None,
+        "entry_price": entry_price,
+        "stop_loss": stop_loss,
+        "take_profit": take_profit,
+        "risk_profile": risk_profile,
+        "sl_type": risk_config.sl_type.value,
+        "tp_type": risk_config.tp_type.value,
+        "risk_reward_ratio": round(abs(take_profit - entry_price) / abs(entry_price - stop_loss), 2) if stop_loss and take_profit and stop_loss != entry_price else None,
+        "trailing_stop": {
+            "enabled": True,
+            "activation_pips": 20,
+            "trail_distance_pips": 15,
+            "breakeven_pips": 15,
+        } if direction != "HOLD" else None,
     }
 
     # Save prediction

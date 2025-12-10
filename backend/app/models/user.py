@@ -1,10 +1,27 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, String, DateTime, Boolean
+from sqlalchemy import Column, String, DateTime, Boolean, JSON
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.database import Base
+
+
+# Default settings for new users
+DEFAULT_USER_SETTINGS = {
+    "defaultLotSize": "0.1",
+    "maxLotSize": "1.0",
+    "maxOpenPositions": "5",
+    "defaultStopLoss": "50",
+    "defaultTakeProfit": "100",
+    "riskPerTrade": "2",
+    "emailNotifications": True,
+    "tradeAlerts": True,
+    "dailySummary": False,
+    "theme": "dark",
+    "timezone": "Asia/Jakarta",
+    "language": "en",
+}
 
 
 class User(Base):
@@ -21,6 +38,9 @@ class User(Base):
     totp_secret = Column(String(32), nullable=True)
     totp_enabled = Column(Boolean, default=False, nullable=False)
     
+    # User settings/preferences stored as JSON
+    settings = Column(JSON, default=dict, nullable=True)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -28,4 +48,9 @@ class User(Base):
     def is_admin(self) -> bool:
         """Check if user has admin role."""
         return self.role == "admin"
+    
+    def get_settings(self) -> dict:
+        """Get user settings with defaults for missing keys."""
+        user_settings = self.settings or {}
+        return {**DEFAULT_USER_SETTINGS, **user_settings}
 

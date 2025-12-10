@@ -27,6 +27,13 @@ class ConnectorSession:
     mt5_connected: bool = False
     broker_name: Optional[str] = None
     account_number: Optional[str] = None
+    # Cached account info from MT5
+    account_balance: Optional[float] = None
+    account_equity: Optional[float] = None
+    account_margin: Optional[float] = None
+    account_free_margin: Optional[float] = None
+    account_profit: Optional[float] = None
+    account_updated_at: Optional[datetime] = None
 
 
 class ConnectionManager:
@@ -210,6 +217,14 @@ class ConnectionManager:
             })
 
         elif msg_type == "ACCOUNT_UPDATE":
+            # Cache account info in session
+            session.account_balance = message.get("balance")
+            session.account_equity = message.get("equity")
+            session.account_margin = message.get("margin")
+            session.account_free_margin = message.get("free_margin")
+            session.account_profit = message.get("profit")
+            session.account_updated_at = datetime.utcnow()
+            
             await self.broadcast_to_user(session.user_id, {
                 "type": "ACCOUNT_UPDATE",
                 "connection_id": connection_id,
@@ -252,6 +267,45 @@ class ConnectionManager:
     def is_connector_online(self, connection_id: str) -> bool:
         """Check if a connector is currently online."""
         return connection_id in self.connector_sessions
+
+    def get_user_account_info(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """Get aggregated account info from all user's active connections.
+        
+        Returns combined balance/equity from all connected MT5 accounts,
+        or None if no connections with account data.
+        """
+        connections = self.user_connections.get(user_id, set())
+        if not connections:
+            return None
+        
+        total_balance = 0.0
+        total_equity = 0.0
+        total_margin = 0.0
+        total_free_margin = 0.0
+        total_profit = 0.0
+        has_data = False
+        
+        for conn_id in connections:
+            session = self.connector_sessions.get(conn_id)
+            if session and session.mt5_connected and session.account_balance is not None:
+                has_data = True
+                total_balance += session.account_balance or 0
+                total_equity += session.account_equity or 0
+                total_margin += session.account_margin or 0
+                total_free_margin += session.account_free_margin or 0
+                total_profit += session.account_profit or 0
+        
+        if not has_data:
+            return None
+        
+        return {
+            "balance": total_balance,
+            "equity": total_equity,
+            "margin": total_margin,
+            "free_margin": total_free_margin,
+            "profit": total_profit,
+            "connections_count": len(connections),
+        }
 
 
 # Global connection manager instance

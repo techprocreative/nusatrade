@@ -1,6 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/api-client';
-import type { Position, Trade, OrderCreate, DashboardStats } from '@/types';
+import type { 
+  Position, 
+  Trade, 
+  OrderCreate, 
+  DashboardStats,
+  CalculateSLTPRequest,
+  CalculateSLTPResponse,
+  RiskProfile,
+} from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
 // Fetch positions
@@ -109,5 +117,27 @@ export function useDashboardStats() {
       return response.data;
     },
     refetchInterval: 30000, // Refetch every 30 seconds
+  });
+}
+
+// Calculate SL/TP based on risk management settings
+export function useCalculateSLTP() {
+  return useMutation<CalculateSLTPResponse, Error, CalculateSLTPRequest>({
+    mutationFn: async (data) => {
+      const response = await apiClient.post('/api/v1/trading/calculate-sl-tp', data);
+      return response.data;
+    },
+  });
+}
+
+// Fetch risk profiles
+export function useRiskProfiles() {
+  return useQuery<{ profiles: Record<string, RiskProfile> }>({
+    queryKey: ['risk-profiles'],
+    queryFn: async () => {
+      const response = await apiClient.get('/api/v1/trading/risk-profiles');
+      return response.data;
+    },
+    staleTime: 1000 * 60 * 60, // Cache for 1 hour
   });
 }

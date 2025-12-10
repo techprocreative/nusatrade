@@ -1,3 +1,6 @@
+from typing import Optional
+from pydantic import BaseModel
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -8,7 +11,9 @@ from app.schemas.trading import (
     TradeOut, 
     PositionOut,
     PositionSizeRequest,
-    PositionSizeResponse
+    PositionSizeResponse,
+    CalculateSLTPRequest,
+    CalculateSLTPResponse,
 )
 from app.services import trading_service
 from app.config import get_settings
@@ -20,13 +25,22 @@ settings = get_settings()
 logger = get_logger(__name__)
 
 
+class TradeOutWithMT5(BaseModel):
+    """Trade response with MT5 execution status."""
+    trade: TradeOut
+    mt5_execution: dict
+
+    class Config:
+        from_attributes = True
+
+
 @router.get("/positions", response_model=list[PositionOut])
 def list_positions(db: Session = Depends(deps.get_db), current_user=Depends(deps.get_current_user)):
     return trading_service.list_positions(db, current_user.id)
 
 
-@router.post("/orders", response_model=TradeOut, status_code=status.HTTP_201_CREATED)
-def create_order(order: OrderCreate, db: Session = Depends(deps.get_db), current_user=Depends(deps.get_current_user)):
+@router.post("/orders", response_model=TradeOutWithMT5, status_code=status.HTTP_201_CREATED)
+async def create_order(order: OrderCreate, db: Session = Depends(deps.get_db), current_user=Depends(deps.get_current_user)):
     # Validate lot size
     if order.lot_size <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="lot_size must be positive")
@@ -54,8 +68,13 @@ def create_order(order: OrderCreate, db: Session = Depends(deps.get_db), current
     logger.info(f"Opening order for user {current_user.id}: {order.symbol} {order.order_type} {order.lot_size} lots")
     logger.info(f"Estimated margin required: ${estimated_margin:.2f}")
     
-    # Open the order
-    trade = trading_service.open_order(
+    # Check if connector is online (if connection_id provided)
+    if order.connection_id:
+        if not trading_service.is_connector_online(order.connection_id):
+            logger.warning(f"Connector {order.connection_id} is not online, order will be saved to database only")
+    
+    # Open the order and send to MT5
+    trade, mt5_result = await trading_service.open_order_with_mt5(
         db,
         current_user.id,
         symbol=order.symbol,
@@ -66,15 +85,27 @@ def create_order(order: OrderCreate, db: Session = Depends(deps.get_db), current
         take_profit=order.take_profit,
         connection_id=order.connection_id,
     )
-    return trade
+    
+    if mt5_result.get("success"):
+        logger.info(f"Order sent to MT5 successfully via connector {order.connection_id}")
+    else:
+        logger.warning(f"MT5 execution failed: {mt5_result.get('error', 'Unknown error')}")
+    
+    return TradeOutWithMT5(trade=TradeOut.model_validate(trade), mt5_execution=mt5_result)
 
 
-@router.put("/orders/{order_id}/close", response_model=TradeOut)
-def close_order(order_id: str, payload: OrderClose, db: Session = Depends(deps.get_db), current_user=Depends(deps.get_current_user)):
-    trade = trading_service.close_order(db, current_user.id, order_id, payload.close_price)
+@router.put("/orders/{order_id}/close", response_model=TradeOutWithMT5)
+async def close_order(order_id: str, payload: OrderClose, db: Session = Depends(deps.get_db), current_user=Depends(deps.get_current_user)):
+    trade, mt5_result = await trading_service.close_order_with_mt5(db, current_user.id, order_id, payload.close_price)
     if not trade:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
-    return trade
+    
+    if mt5_result.get("success"):
+        logger.info(f"Close order sent to MT5 successfully for order {order_id}")
+    else:
+        logger.warning(f"MT5 close execution failed: {mt5_result.get('error', 'Unknown error')}")
+    
+    return TradeOutWithMT5(trade=TradeOut.model_validate(trade), mt5_execution=mt5_result)
 
 
 @router.get("/history", response_model=list[TradeOut])
@@ -94,8 +125,10 @@ def dashboard_stats(
 ):
     """
     Get dashboard statistics for the current user.
+    Uses real balance from MT5 via connector when available.
     """
     from datetime import datetime
+    from app.api.websocket.connection_manager import connection_manager
     
     # Get all positions and trades
     positions = trading_service.list_positions(db, current_user.id)
@@ -118,10 +151,20 @@ def dashboard_stats(
     closed_trades = [t for t in trades if t.close_time is not None]
     total_realized_pnl = sum(float(t.profit or 0) for t in closed_trades) if closed_trades else 0.0
     
-    # Mock balance (in real app, this comes from broker connection)
-    base_balance = 10000.0
-    current_balance = base_balance + total_realized_pnl
-    current_equity = current_balance + total_unrealized_pnl
+    # Try to get real balance from MT5 via connector
+    mt5_account = connection_manager.get_user_account_info(current_user.email)
+    
+    if mt5_account:
+        # Use real MT5 account data
+        current_balance = mt5_account["balance"]
+        current_equity = mt5_account["equity"]
+        logger.info(f"Using real MT5 balance for user {current_user.id}: ${current_balance:.2f}")
+    else:
+        # Fallback: Calculate from trades (for users without active connector)
+        base_balance = 10000.0  # Default starting balance
+        current_balance = base_balance + total_realized_pnl
+        current_equity = current_balance + total_unrealized_pnl
+        logger.debug(f"No active MT5 connection, using calculated balance for user {current_user.id}")
     
     # Calculate win rate (from closed trades only)
     winning_trades = [t for t in closed_trades if t.profit and float(t.profit) > 0]
@@ -136,6 +179,7 @@ def dashboard_stats(
         "unrealized_pnl": round(total_unrealized_pnl, 2),
         "total_trades": len(closed_trades),
         "win_rate": round(win_rate, 1),
+        "has_live_connection": mt5_account is not None,
     }
 
 
@@ -181,3 +225,106 @@ def calculate_position_size(
         stop_loss_pips=stop_loss_pips,
         margin_required=margin_required
     )
+
+
+@router.post("/calculate-sl-tp")
+def calculate_sl_tp_endpoint(
+    request: CalculateSLTPRequest,
+    current_user=Depends(deps.get_current_user)
+):
+    """
+    Calculate SL and TP based on risk management settings.
+    
+    Supports:
+    - Fixed pips SL/TP
+    - ATR-based SL/TP (requires ATR value)
+    - Risk:Reward ratio for TP
+    - Percentage-based SL
+    """
+    from app.services.risk_management import (
+        calculate_stop_loss,
+        calculate_take_profit,
+        SLType,
+        TPType,
+    )
+    
+    # Map string types to enums
+    sl_type_map = {
+        "fixed_pips": SLType.FIXED_PIPS,
+        "atr_based": SLType.ATR_BASED,
+        "percentage": SLType.PERCENTAGE,
+    }
+    tp_type_map = {
+        "fixed_pips": TPType.FIXED_PIPS,
+        "risk_reward": TPType.RISK_REWARD,
+        "atr_based": TPType.ATR_BASED,
+    }
+    
+    sl_type = sl_type_map.get(request.sl_type, SLType.ATR_BASED)
+    tp_type = tp_type_map.get(request.tp_type, TPType.RISK_REWARD)
+    
+    # Calculate SL
+    stop_loss = calculate_stop_loss(
+        entry_price=request.entry_price,
+        direction=request.direction,
+        sl_type=sl_type,
+        sl_value=request.sl_value,
+        atr=request.atr,
+    )
+    
+    # Calculate TP
+    take_profit = calculate_take_profit(
+        entry_price=request.entry_price,
+        direction=request.direction,
+        tp_type=tp_type,
+        tp_value=request.tp_value,
+        stop_loss=stop_loss,
+        atr=request.atr,
+    )
+    
+    # Calculate distances in pips
+    sl_distance_pips = abs(request.entry_price - stop_loss) * 10000
+    tp_distance_pips = abs(take_profit - request.entry_price) * 10000
+    
+    # Calculate risk:reward
+    risk_reward = tp_distance_pips / sl_distance_pips if sl_distance_pips > 0 else 0
+    
+    return CalculateSLTPResponse(
+        stop_loss=stop_loss,
+        take_profit=take_profit,
+        sl_distance_pips=round(sl_distance_pips, 1),
+        tp_distance_pips=round(tp_distance_pips, 1),
+        risk_reward_ratio=round(risk_reward, 2),
+    )
+
+
+@router.get("/risk-profiles")
+def get_risk_profiles(current_user=Depends(deps.get_current_user)):
+    """
+    Get available risk management profiles.
+    """
+    from app.services.risk_management import RISK_PROFILES
+    from app.services.trailing_stop import TRAILING_CONFIGS
+    
+    profiles = {}
+    for name, config in RISK_PROFILES.items():
+        trailing = TRAILING_CONFIGS.get(name)
+        profiles[name] = {
+            "sl_type": config.sl_type.value,
+            "sl_value": config.sl_value,
+            "tp_type": config.tp_type.value,
+            "tp_value": config.tp_value,
+            "risk_per_trade_percent": config.risk_per_trade_percent,
+            "max_position_size": config.max_position_size,
+            "trailing_stop": {
+                "enabled": trailing.enabled if trailing else False,
+                "type": trailing.trailing_type.value if trailing else "fixed_pips",
+                "activation_pips": trailing.activation_pips if trailing else 20,
+                "trail_distance_pips": trailing.trail_distance_pips if trailing else 15,
+                "atr_multiplier": trailing.atr_multiplier if trailing else 1.5,
+                "breakeven_enabled": trailing.breakeven_enabled if trailing else True,
+                "breakeven_pips": trailing.breakeven_pips if trailing else 15,
+            } if trailing else None,
+        }
+    
+    return {"profiles": profiles}

@@ -1,4 +1,4 @@
-"""Event-driven backtesting engine."""
+"""Event-driven backtesting engine with trailing stop and adaptive SL/TP."""
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -9,6 +9,19 @@ import pandas as pd
 
 from app.backtesting.data_manager import DataManager
 from app.backtesting.metrics import BacktestMetrics, calculate_metrics
+from app.services.risk_management import (
+    calculate_atr_from_dataframe,
+    calculate_sl_tp,
+    RiskConfig,
+    SLType,
+    TPType,
+)
+from app.services.trailing_stop import (
+    TrailingStopConfig,
+    TrailingStopType,
+    PositionState,
+    process_trailing_stop,
+)
 from app.core.logging import get_logger
 
 
@@ -53,6 +66,11 @@ class Position:
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
     bars_held: int = 0
+    # Trailing stop tracking
+    highest_price: float = 0.0  # For BUY positions
+    lowest_price: float = float('inf')  # For SELL positions
+    breakeven_hit: bool = False
+    initial_sl: Optional[float] = None  # Original SL before modifications
 
 
 @dataclass
@@ -96,6 +114,11 @@ class BacktestConfig:
     pip_value: float = 10.0  # Per standard lot for most pairs
     allow_pyramiding: bool = False  # Multiple positions same direction
     max_positions: int = 1
+    # Trailing stop configuration
+    trailing_stop_enabled: bool = False
+    trailing_stop_config: Optional[TrailingStopConfig] = None
+    # ATR period for dynamic calculations
+    atr_period: int = 14
 
 
 class BacktestEngine:
@@ -122,10 +145,17 @@ class BacktestEngine:
         self._order_counter = 0
         self._current_bar_index = 0
         self._current_bar: Optional[Dict] = None
+        self._current_atr: float = 0.0
+        self._data: Optional[pd.DataFrame] = None
+        
+        # Initialize trailing stop config if not provided
+        if self.config.trailing_stop_enabled and self.config.trailing_stop_config is None:
+            self.config.trailing_stop_config = TrailingStopConfig()
 
     def run(self) -> Dict[str, Any]:
         """Run the backtest and return results."""
         data = self.data_manager.load()
+        self._data = data
         
         if data.empty:
             logger.warning("No data to backtest")
@@ -133,6 +163,8 @@ class BacktestEngine:
 
         logger.info(f"Starting backtest with {len(data)} candles")
         logger.info(f"Initial balance: ${self.config.initial_balance:,.2f}")
+        if self.config.trailing_stop_enabled:
+            logger.info("Trailing stop enabled")
 
         # Initialize strategy if it has an init method
         if hasattr(self.strategy, "initialize"):
@@ -144,24 +176,40 @@ class BacktestEngine:
             self._current_bar = data.iloc[i].to_dict()
             bar_time = self._current_bar["timestamp"]
 
-            # 1. Check stop loss / take profit
+            # 0. Calculate current ATR
+            if i >= self.config.atr_period:
+                self._current_atr = calculate_atr_from_dataframe(
+                    data.iloc[:i + 1], self.config.atr_period
+                )
+
+            # 1. Update trailing stops (before exit check)
+            if self.config.trailing_stop_enabled:
+                self._update_trailing_stops()
+
+            # 2. Check stop loss / take profit
             self._check_exit_conditions()
 
-            # 2. Process pending orders
+            # 3. Process pending orders
             self._process_pending_orders()
 
-            # 3. Let strategy generate signals
+            # 4. Let strategy generate signals
             bars_available = data.iloc[:i + 1]
             if hasattr(self.strategy, "on_bar"):
                 self.strategy.on_bar(self, bars_available)
 
-            # 4. Update equity and record
+            # 5. Update equity and record
             self._update_equity()
             self.equity_curve.append(self.equity)
 
-            # 5. Increment bars held for positions
+            # 6. Increment bars held and update price extremes for positions
             for pos in self.positions:
                 pos.bars_held += 1
+                # Track price extremes for trailing stop
+                current = self.current_price
+                if pos.order_type == OrderType.BUY:
+                    pos.highest_price = max(pos.highest_price, current)
+                else:
+                    pos.lowest_price = min(pos.lowest_price, current)
 
         # Close any remaining positions at last price
         self._close_all_positions("end_of_backtest")
@@ -228,6 +276,114 @@ class BacktestEngine:
         """Get current bar index."""
         return self._current_bar_index
 
+    @property
+    def current_atr(self) -> float:
+        """Get current ATR value."""
+        return self._current_atr
+
+    def update_position_sl(self, position_id: int, new_sl: float) -> bool:
+        """
+        Update the stop loss for a position (used for trailing stop).
+        
+        Args:
+            position_id: ID of the position to update
+            new_sl: New stop loss price
+            
+        Returns:
+            True if position was found and updated
+        """
+        for pos in self.positions:
+            if pos.id == position_id:
+                old_sl = pos.stop_loss
+                pos.stop_loss = new_sl
+                logger.debug(f"Position {position_id}: SL updated {old_sl} -> {new_sl}")
+                return True
+        return False
+
+    def _update_trailing_stops(self):
+        """Update trailing stops for all open positions."""
+        if not self.config.trailing_stop_config:
+            return
+        
+        config = self.config.trailing_stop_config
+        current = self.current_price
+        
+        for pos in self.positions:
+            # Create position state for trailing stop calculation
+            state = PositionState(
+                position_id=pos.id,
+                direction=pos.order_type.value,
+                entry_price=pos.entry_price,
+                current_sl=pos.stop_loss,
+                lot_size=pos.lot_size,
+                highest_price=pos.highest_price,
+                lowest_price=pos.lowest_price,
+                breakeven_hit=pos.breakeven_hit,
+            )
+            
+            # Process trailing stop
+            new_sl, is_breakeven = process_trailing_stop(
+                state, current, config, self._current_atr
+            )
+            
+            if new_sl is not None:
+                pos.stop_loss = new_sl
+                if is_breakeven:
+                    pos.breakeven_hit = True
+                    logger.debug(f"Position {pos.id}: Moved to breakeven at {new_sl}")
+                else:
+                    logger.debug(f"Position {pos.id}: Trailing SL updated to {new_sl}")
+
+    def buy_with_atr_sl(
+        self,
+        lot_size: float,
+        sl_atr_multiplier: float = 2.0,
+        tp_risk_reward: float = 2.0,
+    ) -> int:
+        """
+        Place a buy order with ATR-based stop loss.
+        
+        Args:
+            lot_size: Position size in lots
+            sl_atr_multiplier: ATR multiplier for stop loss
+            tp_risk_reward: Risk:Reward ratio for take profit
+        """
+        if self._current_atr == 0:
+            # Fallback to fixed pips if ATR not available
+            sl = self.current_price - (50 * 0.0001)
+            tp = self.current_price + (100 * 0.0001)
+        else:
+            sl_distance = self._current_atr * sl_atr_multiplier
+            sl = self.current_price - sl_distance
+            tp = self.current_price + (sl_distance * tp_risk_reward)
+        
+        return self.buy(lot_size, stop_loss=sl, take_profit=tp)
+
+    def sell_with_atr_sl(
+        self,
+        lot_size: float,
+        sl_atr_multiplier: float = 2.0,
+        tp_risk_reward: float = 2.0,
+    ) -> int:
+        """
+        Place a sell order with ATR-based stop loss.
+        
+        Args:
+            lot_size: Position size in lots
+            sl_atr_multiplier: ATR multiplier for stop loss
+            tp_risk_reward: Risk:Reward ratio for take profit
+        """
+        if self._current_atr == 0:
+            # Fallback to fixed pips if ATR not available
+            sl = self.current_price + (50 * 0.0001)
+            tp = self.current_price - (100 * 0.0001)
+        else:
+            sl_distance = self._current_atr * sl_atr_multiplier
+            sl = self.current_price + sl_distance
+            tp = self.current_price - (sl_distance * tp_risk_reward)
+        
+        return self.sell(lot_size, stop_loss=sl, take_profit=tp)
+
     def _create_order(
         self,
         order_type: OrderType,
@@ -281,6 +437,11 @@ class BacktestEngine:
                 entry_time=self._current_bar["timestamp"],
                 stop_loss=order.stop_loss,
                 take_profit=order.take_profit,
+                # Initialize trailing stop tracking
+                highest_price=fill_price,
+                lowest_price=fill_price,
+                breakeven_hit=False,
+                initial_sl=order.stop_loss,
             )
             self.positions.append(position)
 

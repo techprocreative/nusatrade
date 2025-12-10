@@ -3,6 +3,7 @@
 import logging
 from datetime import datetime
 from typing import Optional
+import os
 
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -43,90 +44,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(title)
         self.setMinimumSize(720, 580)
         
-        # Dark theme
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #1a1a2e;
-            }
-            QWidget {
-                background-color: #1a1a2e;
-                color: #ffffff;
-            }
-            QTabWidget::pane {
-                border: 1px solid #3a3a5a;
-                border-radius: 8px;
-                background-color: #16213e;
-            }
-            QTabBar::tab {
-                background-color: #16213e;
-                color: #7f8c8d;
-                padding: 10px 20px;
-                margin-right: 4px;
-                border-top-left-radius: 6px;
-                border-top-right-radius: 6px;
-            }
-            QTabBar::tab:selected {
-                background-color: #1a1a2e;
-                color: #4fc3f7;
-                border-bottom: 2px solid #4fc3f7;
-            }
-            QGroupBox {
-                font-weight: bold;
-                font-size: 13px;
-                border: 2px solid #3a3a5a;
-                border-radius: 8px;
-                margin-top: 12px;
-                padding-top: 8px;
-                background-color: #16213e;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 16px;
-                padding: 0 8px;
-                color: #4fc3f7;
-            }
-            QLineEdit, QSpinBox {
-                background-color: #1a1a2e;
-                border: 2px solid #3a3a5a;
-                border-radius: 6px;
-                padding: 8px 12px;
-                color: #ffffff;
-                font-size: 13px;
-                min-height: 20px;
-            }
-            QLineEdit:focus, QSpinBox:focus {
-                border-color: #4fc3f7;
-            }
-            QTextEdit {
-                background-color: #1a1a2e;
-                border: 2px solid #3a3a5a;
-                border-radius: 6px;
-                color: #ffffff;
-            }
-            QComboBox {
-                background-color: #1a1a2e;
-                border: 2px solid #3a3a5a;
-                border-radius: 6px;
-                padding: 8px 12px;
-                color: #ffffff;
-                min-height: 20px;
-            }
-            QComboBox::drop-down {
-                border: none;
-            }
-            QComboBox QAbstractItemView {
-                background-color: #16213e;
-                color: #ffffff;
-                selection-background-color: #4fc3f7;
-            }
-            QCheckBox {
-                color: #b0b0b0;
-            }
-            QStatusBar {
-                background-color: #16213e;
-                color: #7f8c8d;
-            }
-        """)
+        # Load stylesheet
+        self._load_stylesheet()
 
         # Services
         self.config_manager = ConfigManager()
@@ -144,6 +63,13 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self._setup_timers()
+
+    def _load_stylesheet(self):
+        """Load external stylesheet."""
+        style_path = os.path.join(os.path.dirname(__file__), "styles", "dark_theme.qss")
+        if os.path.exists(style_path):
+            with open(style_path, "r") as f:
+                self.setStyleSheet(f.read())
 
     def _build_ui(self):
         """Build the user interface."""
@@ -178,13 +104,7 @@ class MainWindow(QMainWindow):
 
         # Status indicators
         status_frame = QFrame()
-        status_frame.setStyleSheet("""
-            QFrame {
-                background-color: #16213e;
-                border-radius: 8px;
-                padding: 8px;
-            }
-        """)
+        status_frame.setObjectName("StatusFrame")
         status_layout = QHBoxLayout(status_frame)
         status_layout.setSpacing(24)
         status_layout.setContentsMargins(16, 10, 16, 10)
@@ -206,38 +126,14 @@ class MainWindow(QMainWindow):
         self.connect_btn.setMinimumSize(130, 44)
         self.connect_btn.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
         self.connect_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.connect_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #27ae60;
-                color: white;
-                border: none;
-                border-radius: 6px;
-            }
-            QPushButton:hover {
-                background-color: #2ecc71;
-            }
-            QPushButton:disabled {
-                background-color: #3a3a5a;
-                color: #6a6a8a;
-            }
-        """)
+        self.connect_btn.setProperty("class", "primary")
         self.connect_btn.clicked.connect(self._connect)
 
         self.disconnect_btn = QPushButton("Disconnect")
         self.disconnect_btn.setMinimumSize(130, 44)
         self.disconnect_btn.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
         self.disconnect_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.disconnect_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #e74c3c;
-                color: white;
-                border: none;
-                border-radius: 6px;
-            }
-            QPushButton:hover {
-                background-color: #c0392b;
-            }
-        """)
+        self.disconnect_btn.setProperty("class", "danger")
         self.disconnect_btn.clicked.connect(self._disconnect)
         self.disconnect_btn.setEnabled(False)
 
@@ -294,14 +190,7 @@ class MainWindow(QMainWindow):
 
         # Detected Info
         self.detected_group = QGroupBox("Detected Information")
-        self.detected_group.setStyleSheet("""
-            QGroupBox {
-                border-color: #27ae60;
-            }
-            QGroupBox::title {
-                color: #27ae60;
-            }
-        """)
+        self.detected_group.setObjectName("DetectedGroup")
         detected_layout = QFormLayout()
         detected_layout.setSpacing(10)
         detected_layout.setContentsMargins(20, 24, 20, 20)
@@ -367,18 +256,7 @@ class MainWindow(QMainWindow):
 
         refresh_btn = QPushButton("Refresh Positions")
         refresh_btn.setMinimumHeight(40)
-        refresh_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3498db;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
-        """)
+        refresh_btn.setProperty("class", "info")
         refresh_btn.clicked.connect(self._refresh_positions)
 
         positions_layout.addWidget(self.positions_text)
@@ -425,34 +303,12 @@ class MainWindow(QMainWindow):
         
         save_btn = QPushButton("Save Settings")
         save_btn.setMinimumHeight(44)
-        save_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #27ae60;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #2ecc71;
-            }
-        """)
+        save_btn.setProperty("class", "primary")
         save_btn.clicked.connect(self._save_settings)
 
         logout_btn = QPushButton("Logout")
         logout_btn.setMinimumHeight(44)
-        logout_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #e67e22;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #d35400;
-            }
-        """)
+        logout_btn.setProperty("class", "warning")
         logout_btn.clicked.connect(self._logout)
 
         btn_layout.addWidget(save_btn)
@@ -476,17 +332,7 @@ class MainWindow(QMainWindow):
 
         clear_btn = QPushButton("Clear Logs")
         clear_btn.setMinimumHeight(40)
-        clear_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #7f8c8d;
-                color: white;
-                border: none;
-                border-radius: 6px;
-            }
-            QPushButton:hover {
-                background-color: #95a5a6;
-            }
-        """)
+        clear_btn.setProperty("class", "secondary")
         clear_btn.clicked.connect(self.log_view.clear)
 
         layout.addWidget(self.log_view)

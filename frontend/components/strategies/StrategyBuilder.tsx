@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -12,9 +13,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { useGenerateStrategy } from "@/hooks/api/useStrategies";
 import type { AIStrategyRequest, AIStrategyResponse } from "@/types";
-import { Sparkles, Loader2 } from "lucide-react";
+import { Sparkles, Loader2, ChevronDown, Shield } from "lucide-react";
 
 const SYMBOLS = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "XAUUSD"];
 const TIMEFRAMES = ["M5", "M15", "M30", "H1", "H4", "D1"];
@@ -181,6 +187,64 @@ export function StrategyBuilder({ onGenerated }: StrategyBuilderProps) {
             ))}
           </div>
         </div>
+
+        {/* Advanced Risk Management Info */}
+        <Collapsible>
+          <CollapsibleTrigger className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors">
+            <Shield className="w-4 h-4" />
+            <span>Advanced Risk Management</span>
+            <ChevronDown className="w-4 h-4" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-3 p-4 bg-slate-700/50 rounded-lg border border-slate-600">
+            <div className="space-y-4">
+              <p className="text-xs text-slate-400">
+                The AI will generate risk management settings based on your chosen risk profile. 
+                These include:
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div className="p-3 bg-slate-800 rounded border border-slate-600">
+                  <p className="font-medium text-white mb-2">Stop Loss</p>
+                  <ul className="space-y-1 text-slate-400">
+                    <li>- ATR-based (volatility adjusted)</li>
+                    <li>- Fixed pips</li>
+                    <li>- Percentage of price</li>
+                  </ul>
+                </div>
+                <div className="p-3 bg-slate-800 rounded border border-slate-600">
+                  <p className="font-medium text-white mb-2">Take Profit</p>
+                  <ul className="space-y-1 text-slate-400">
+                    <li>- Risk:Reward ratio</li>
+                    <li>- ATR-based</li>
+                    <li>- Fixed pips</li>
+                  </ul>
+                </div>
+                <div className="p-3 bg-slate-800 rounded border border-slate-600">
+                  <p className="font-medium text-white mb-2">Trailing Stop</p>
+                  <ul className="space-y-1 text-slate-400">
+                    <li>- Activation threshold</li>
+                    <li>- Trail distance</li>
+                    <li>- Breakeven protection</li>
+                  </ul>
+                </div>
+                <div className="p-3 bg-slate-800 rounded border border-slate-600">
+                  <p className="font-medium text-white mb-2">Position Sizing</p>
+                  <ul className="space-y-1 text-slate-400">
+                    <li>- Risk per trade %</li>
+                    <li>- Max position size</li>
+                    <li>- Max daily loss</li>
+                  </ul>
+                </div>
+              </div>
+              <div className="p-3 bg-blue-500/10 rounded border border-blue-500/20">
+                <p className="text-xs text-blue-400">
+                  <strong>Tip:</strong> For trend-following strategies, trailing stops are automatically 
+                  enabled to lock in profits. Include specific risk requirements in your prompt 
+                  for more control (e.g., &quot;use 2:1 risk reward with trailing stop at 20 pips&quot;).
+                </p>
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
 
         {/* Generate Button */}
         <Button

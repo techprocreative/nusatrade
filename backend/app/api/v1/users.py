@@ -58,16 +58,23 @@ def update_user_settings(
 ):
     """
     Update user settings/preferences.
-    
-    Settings are stored in a JSON field or separate settings table.
-    For now, we'll return success (implement storage later if needed).
+    Settings are stored in a JSON field on the User model.
     """
-    # TODO: Implement settings storage (add settings field to User model or create Settings table)
-    # For MVP, we can store in session or return success
+    # Get current settings or empty dict
+    current_settings = current_user.settings or {}
+    
+    # Merge new settings (only non-None values)
+    new_settings = settings.model_dump(exclude_none=True)
+    updated_settings = {**current_settings, **new_settings}
+    
+    # Save to database
+    current_user.settings = updated_settings
+    db.commit()
+    db.refresh(current_user)
     
     return {
         "message": "Settings updated successfully",
-        "settings": settings.dict(exclude_none=True)
+        "settings": current_user.get_settings()
     }
 
 
@@ -77,23 +84,6 @@ def get_user_settings(
 ):
     """
     Get user settings/preferences.
-    
-    Returns default settings for now (implement storage later if needed).
+    Returns user's saved settings merged with defaults.
     """
-    # TODO: Fetch from database when storage is implemented
-    default_settings = {
-        "defaultLotSize": "0.1",
-        "maxLotSize": "1.0",
-        "maxOpenPositions": "5",
-        "defaultStopLoss": "50",
-        "defaultTakeProfit": "100",
-        "riskPerTrade": "2",
-        "emailNotifications": True,
-        "tradeAlerts": True,
-        "dailySummary": False,
-        "theme": "dark",
-        "timezone": "Asia/Jakarta",
-        "language": "en",
-    }
-    
-    return default_settings
+    return current_user.get_settings()
