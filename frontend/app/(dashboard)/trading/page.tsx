@@ -110,7 +110,7 @@ export default function TradingPage() {
                 <Label htmlFor="takeProfit">Take Profit (optional)</Label>
                 <Input id="takeProfit" type="number" step="0.00001" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} placeholder="0.00000" />
               </div>
-              
+
               {/* Risk Management Panel */}
               <RiskManagementPanel
                 symbol={symbol}
@@ -119,7 +119,7 @@ export default function TradingPage() {
                 onSLTPCalculated={handleSLTPCalculated}
                 onTrailingStopChange={setTrailingStop}
               />
-              
+
               {/* Trailing Stop Indicator */}
               {trailingStop?.enabled && (
                 <div className="text-xs p-2 bg-blue-500/10 rounded border border-blue-500/20">
@@ -127,7 +127,7 @@ export default function TradingPage() {
                   <span className="ml-1">Activate at {trailingStop.activation_pips} pips, trail {trailingStop.trail_distance_pips} pips</span>
                 </div>
               )}
-              
+
               <Button type="submit" className="w-full" disabled={placeOrderMutation.isPending} variant={orderType === "BUY" ? "default" : "destructive"}>
                 {placeOrderMutation.isPending ? "Placing..." : `${orderType} ${symbol}`}
               </Button>
@@ -167,7 +167,7 @@ export default function TradingPage() {
                       <td className="text-right px-2">{pos.lot_size}</td>
                       <td className="text-right text-muted-foreground px-2">{pos.open_price.toFixed(5)}</td>
                       <td className="text-right text-muted-foreground px-2">{pos.current_price?.toFixed(5) || "-"}</td>
-                      <td className={`text-right font-semibold px-2 ${pos.profit >= 0 ? "text-green-500" : "text-red-500"}`}>${pos.profit.toFixed(2)}</td>
+                      <td className={`text-right font-semibold px-2 ${(pos.profit ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`}>${(pos.profit ?? 0).toFixed(2)}</td>
                       <td className="text-right px-2">
                         <Button size="sm" variant="destructive" onClick={() => handleClosePosition(pos.id)} disabled={closePositionMutation.isPending}>Close</Button>
                       </td>
