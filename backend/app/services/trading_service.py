@@ -99,9 +99,13 @@ async def send_open_order_to_mt5(
         logger.warning("No connection_id provided, skipping MT5 execution")
         return {"success": False, "error": "No connection_id provided"}
     
-    if not connection_manager.is_connector_online(connection_id):
-        logger.warning(f"Connector {connection_id} is not online")
-        return {"success": False, "error": "Connector is not online"}
+    # Log current connector status
+    is_online = connection_manager.is_connector_online(connection_id)
+    logger.info(f"Connector {connection_id} online status: {is_online}")
+    
+    if not is_online:
+        logger.warning(f"Connector {connection_id} is not online - trade will be saved but not executed in MT5")
+        return {"success": False, "error": "Connector is not online", "connection_id": connection_id}
     
     request_id = str(trade.id)
     # Use TRADE_OPEN format expected by connector's MessageHandler
@@ -120,12 +124,13 @@ async def send_open_order_to_mt5(
         trade_command["take_profit"] = take_profit
     
     try:
+        logger.info(f"Sending TRADE_OPEN to connector {connection_id}: {trade_command}")
         await connection_manager.send_to_connector(connection_id, trade_command)
         logger.info(f"Sent TRADE_OPEN to connector {connection_id}: {symbol} {order_type} {lot_size} lots")
-        return {"success": True, "request_id": request_id}
+        return {"success": True, "request_id": request_id, "connection_id": connection_id}
     except Exception as e:
         logger.error(f"Failed to send TRADE_OPEN to connector: {e}")
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(e), "connection_id": connection_id}
 
 
 async def send_close_order_to_mt5(

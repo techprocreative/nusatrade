@@ -657,6 +657,7 @@ async def execute_prediction(
 ):
     """Execute a trade based on ML prediction."""
     from app.services import trading_service
+    from app.models.broker import BrokerConnection
     
     # Verify model ownership
     model = db.query(MLModel).filter(
@@ -682,6 +683,18 @@ async def execute_prediction(
     if direction == "HOLD":
         raise HTTPException(status_code=400, detail="Cannot execute HOLD signal")
 
+    # Auto-detect connection_id if not provided
+    connection_id = request.connection_id
+    if not connection_id:
+        # Find an active broker connection for this user
+        active_connection = db.query(BrokerConnection).filter(
+            BrokerConnection.user_id == current_user.id,
+            BrokerConnection.is_active == True,
+        ).first()
+        if active_connection:
+            connection_id = str(active_connection.id)
+            logger.info(f"Auto-detected connection: {connection_id}")
+
     # Execute trade using trading service
     try:
         trade, mt5_result = await trading_service.open_order_with_mt5(
@@ -693,7 +706,7 @@ async def execute_prediction(
             price=pred_data.get("entry_price", 0),
             stop_loss=pred_data.get("stop_loss"),
             take_profit=pred_data.get("take_profit"),
-            connection_id=request.connection_id,
+            connection_id=connection_id,
         )
 
         return {
@@ -706,6 +719,7 @@ async def execute_prediction(
             "take_profit": pred_data.get("take_profit"),
             "lot_size": request.lot_size,
             "mt5_execution": mt5_result,
+            "connection_id": connection_id,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to execute trade: {str(e)}")
