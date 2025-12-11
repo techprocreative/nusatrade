@@ -21,6 +21,11 @@ class MLModel(Base):
     performance_metrics = Column(JSON)
     file_path = Column(String(500))
     is_active = Column(Boolean, default=False)
+    # Training status fields
+    training_status = Column(String(20), default="idle")  # idle, training, completed, failed
+    training_error = Column(String(500), nullable=True)
+    training_started_at = Column(DateTime, nullable=True)
+    training_completed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

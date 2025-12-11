@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import {
   useMLModels,
   useCreateMLModel,
@@ -32,8 +32,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import type { MLModel, MLPrediction } from "@/types";
-import { TrendingUp, TrendingDown, Zap, Brain, Target } from "lucide-react";
+import type { MLModel, MLPrediction, TrainingStatus } from "@/types";
+import { TrendingUp, TrendingDown, Zap, Brain, Target, Loader2, CheckCircle, XCircle, Clock } from "lucide-react";
 
 function StatCard({ label, value, icon, color }: { 
   label: string; 
@@ -53,6 +53,24 @@ function StatCard({ label, value, icon, color }: {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function TrainingStatusBadge({ status }: { status: TrainingStatus }) {
+  const variants: Record<TrainingStatus, { variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode; label: string }> = {
+    idle: { variant: "outline", icon: <Clock className="w-3 h-3" />, label: "Not Trained" },
+    training: { variant: "secondary", icon: <Loader2 className="w-3 h-3 animate-spin" />, label: "Training..." },
+    completed: { variant: "default", icon: <CheckCircle className="w-3 h-3" />, label: "Trained" },
+    failed: { variant: "destructive", icon: <XCircle className="w-3 h-3" />, label: "Failed" },
+  };
+  
+  const config = variants[status] || variants.idle;
+  
+  return (
+    <Badge variant={config.variant} className="gap-1">
+      {config.icon}
+      {config.label}
+    </Badge>
   );
 }
 
@@ -326,13 +344,16 @@ export default function BotsPage() {
                         </div>
 
                         <div className="flex items-center gap-4">
+                          {/* Training Status */}
+                          <TrainingStatusBadge status={model.training_status || "idle"} />
+
                           {/* Metrics */}
-                          {model.performance_metrics && (
+                          {model.performance_metrics && model.training_status === "completed" && (
                             <div className="hidden md:flex gap-4 text-sm">
                               <div className="text-center">
                                 <p className="text-muted-foreground text-xs">Accuracy</p>
                                 <p className="font-semibold">
-                                  {(model.performance_metrics.accuracy! * 100).toFixed(1)}%
+                                  {((model.performance_metrics.accuracy || 0) * 100).toFixed(1)}%
                                 </p>
                               </div>
                             </div>
@@ -347,7 +368,8 @@ export default function BotsPage() {
                                 e.stopPropagation();
                                 handleToggleActive(model.id, model.is_active);
                               }}
-                              disabled={toggleModelMutation.isPending}
+                              disabled={toggleModelMutation.isPending || model.training_status !== "completed"}
+                              title={model.training_status !== "completed" ? "Train model first" : undefined}
                             >
                               {model.is_active ? "Active" : "Activate"}
                             </Button>
@@ -358,9 +380,16 @@ export default function BotsPage() {
                                 e.stopPropagation();
                                 handleTrain(model.id);
                               }}
-                              disabled={trainModelMutation.isPending}
+                              disabled={trainModelMutation.isPending || model.training_status === "training"}
                             >
-                              Train
+                              {model.training_status === "training" ? (
+                                <>
+                                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                  Training...
+                                </>
+                              ) : (
+                                "Train"
+                              )}
                             </Button>
                             <Button
                               size="sm"

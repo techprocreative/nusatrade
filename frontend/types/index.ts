@@ -105,6 +105,8 @@ export interface RiskProfile {
 }
 
 // ML Model types
+export type TrainingStatus = 'idle' | 'training' | 'completed' | 'failed';
+
 export interface MLModel {
   id: string;
   name: string;
@@ -117,8 +119,17 @@ export interface MLModel {
   performance_metrics: {
     accuracy?: number;
     precision?: number;
+    recall?: number;
     f1_score?: number;
+    train_samples?: number;
+    test_samples?: number;
+    feature_count?: number;
+    top_features?: Record<string, number>;
   } | null;
+  training_status: TrainingStatus;
+  training_error?: string;
+  training_started_at?: string;
+  training_completed_at?: string;
   created_at: string;
 }
 

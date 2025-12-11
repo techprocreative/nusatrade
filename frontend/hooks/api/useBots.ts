@@ -88,27 +88,56 @@ export function useToggleMLModel() {
 
 // Train model
 export function useTrainMLModel() {
+  const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
     mutationFn: async (modelId: string) => {
-      // Send empty object as body to satisfy Pydantic validation
       const response = await apiClient.post(`/api/v1/ml/models/${modelId}/train`, {});
       return response.data;
     },
-    onSuccess: () => {
-      toast({
-        title: 'Training Started',
-        description: 'Model training has been initiated. This may take a few minutes.',
-      });
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['ml-models'] });
+      if (data.status === 'completed') {
+        toast({
+          title: 'Training Completed',
+          description: `Model trained successfully. Accuracy: ${(data.metrics?.accuracy * 100 || 0).toFixed(1)}%`,
+        });
+      } else if (data.status === 'failed') {
+        toast({
+          variant: 'destructive',
+          title: 'Training Failed',
+          description: data.message || 'Training failed',
+        });
+      }
     },
     onError: (error: any) => {
+      queryClient.invalidateQueries({ queryKey: ['ml-models'] });
       toast({
         variant: 'destructive',
         title: 'Training Failed',
         description: getErrorMessage(error),
       });
     },
+  });
+}
+
+// Get training status
+export function useTrainingStatus(modelId: string | null, enabled: boolean = false) {
+  return useQuery<{
+    id: string;
+    training_status: string;
+    training_error?: string;
+    performance_metrics?: Record<string, any>;
+  }>({
+    queryKey: ['training-status', modelId],
+    queryFn: async () => {
+      if (!modelId) throw new Error('No model ID');
+      const response = await apiClient.get(`/api/v1/ml/models/${modelId}/status`);
+      return response.data;
+    },
+    enabled: !!modelId && enabled,
+    refetchInterval: enabled ? 2000 : false, // Poll every 2s when enabled
   });
 }
 

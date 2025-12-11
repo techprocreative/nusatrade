@@ -42,6 +42,10 @@ class ModelResponse(BaseModel):
     strategy_name: Optional[str] = None
     is_active: bool
     performance_metrics: Optional[dict]
+    training_status: str = "idle"
+    training_error: Optional[str] = None
+    training_started_at: Optional[datetime] = None
+    training_completed_at: Optional[datetime] = None
     created_at: datetime
 
 
@@ -103,6 +107,10 @@ def list_models(
             strategy_name=strategy_name,
             is_active=m.is_active or False,
             performance_metrics=m.performance_metrics,
+            training_status=m.training_status or "idle",
+            training_error=m.training_error,
+            training_started_at=m.training_started_at,
+            training_completed_at=m.training_completed_at,
             created_at=m.created_at or datetime.utcnow(),
         ))
     
@@ -154,6 +162,10 @@ def create_model(
         strategy_name=strategy_name,
         is_active=model.is_active,
         performance_metrics=model.performance_metrics,
+        training_status=model.training_status or "idle",
+        training_error=model.training_error,
+        training_started_at=model.training_started_at,
+        training_completed_at=model.training_completed_at,
         created_at=model.created_at,
     )
 
@@ -188,6 +200,10 @@ def get_model(
         strategy_name=strategy_name,
         is_active=model.is_active or False,
         performance_metrics=model.performance_metrics,
+        training_status=model.training_status or "idle",
+        training_error=model.training_error,
+        training_started_at=model.training_started_at,
+        training_completed_at=model.training_completed_at,
         created_at=model.created_at or datetime.utcnow(),
     )
 
@@ -239,6 +255,10 @@ def update_model(
         strategy_name=strategy_name,
         is_active=model.is_active or False,
         performance_metrics=model.performance_metrics,
+        training_status=model.training_status or "idle",
+        training_error=model.training_error,
+        training_started_at=model.training_started_at,
+        training_completed_at=model.training_completed_at,
         created_at=model.created_at or datetime.utcnow(),
     )
 
@@ -297,11 +317,10 @@ def _train_model_task(model_id: str, config: dict, db_url: str):
 def train_model(
     model_id: str,
     request: TrainRequest,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(deps.get_db),
     current_user=Depends(deps.get_current_user),
 ):
-    """Start training an ML model (runs in background)."""
+    """Train an ML model synchronously."""
     model = db.query(MLModel).filter(
         MLModel.id == model_id,
         MLModel.user_id == current_user.id,
@@ -310,18 +329,79 @@ def train_model(
     if not model:
         raise HTTPException(status_code=404, detail="Model not found")
 
-    # Note: In production, use Celery for background tasks
-    # For now, return immediate response indicating training started
-    
+    # Check if already training
+    if model.training_status == "training":
+        raise HTTPException(status_code=400, detail="Model is already being trained")
+
+    # Update status to training
+    model.training_status = "training"
+    model.training_error = None
+    model.training_started_at = datetime.utcnow()
+    model.training_completed_at = None
+    db.commit()
+
+    try:
+        # Train the model
+        trainer = Trainer()
+        result = trainer.train(
+            model_type=model.model_type or "random_forest",
+            test_split=request.test_split,
+            config={
+                "start_date": request.start_date,
+                "end_date": request.end_date,
+            },
+        )
+
+        if result.get("success"):
+            # Update model with results
+            model.file_path = result.get("model_path")
+            model.performance_metrics = result.get("metrics", {})
+            model.training_status = "completed"
+            model.training_completed_at = datetime.utcnow()
+        else:
+            model.training_status = "failed"
+            model.training_error = result.get("error", "Unknown training error")
+        
+        db.commit()
+
+        return {
+            "id": model_id,
+            "status": model.training_status,
+            "message": "Training completed" if model.training_status == "completed" else model.training_error,
+            "metrics": model.performance_metrics,
+            "training_completed_at": model.training_completed_at.isoformat() if model.training_completed_at else None,
+        }
+
+    except Exception as e:
+        model.training_status = "failed"
+        model.training_error = str(e)
+        db.commit()
+        raise HTTPException(status_code=500, detail=f"Training failed: {str(e)}")
+
+
+@router.get("/models/{model_id}/status")
+def get_training_status(
+    model_id: str,
+    db: Session = Depends(deps.get_db),
+    current_user=Depends(deps.get_current_user),
+):
+    """Get training status of a model."""
+    model = db.query(MLModel).filter(
+        MLModel.id == model_id,
+        MLModel.user_id == current_user.id,
+    ).first()
+
+    if not model:
+        raise HTTPException(status_code=404, detail="Model not found")
+
     return {
         "id": model_id,
-        "status": "training_queued",
-        "message": "Model training has been queued. Check status periodically.",
-        "config": {
-            "start_date": request.start_date,
-            "end_date": request.end_date,
-            "test_split": request.test_split,
-        },
+        "training_status": model.training_status or "idle",
+        "training_error": model.training_error,
+        "training_started_at": model.training_started_at.isoformat() if model.training_started_at else None,
+        "training_completed_at": model.training_completed_at.isoformat() if model.training_completed_at else None,
+        "performance_metrics": model.performance_metrics,
+        "file_path": model.file_path,
     }
 
 
