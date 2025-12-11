@@ -512,14 +512,14 @@ export default function BotsPage() {
             <div className="space-y-2">
               <Label htmlFor="strategy">Link to Strategy (Optional)</Label>
               <Select
-                value={newModel.strategy_id}
-                onValueChange={(value) => setNewModel({ ...newModel, strategy_id: value })}
+                value={newModel.strategy_id || "none"}
+                onValueChange={(value) => setNewModel({ ...newModel, strategy_id: value === "none" ? "" : value })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select a strategy" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No Strategy</SelectItem>
+                  <SelectItem value="none">No Strategy</SelectItem>
                   {strategies.map((s) => (
                     <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                   ))}
