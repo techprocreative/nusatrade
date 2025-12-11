@@ -709,3 +709,78 @@ async def execute_prediction(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to execute trade: {str(e)}")
+
+
+@router.get("/dashboard/active-bots")
+def get_active_bots_stats(
+    db: Session = Depends(deps.get_db),
+    current_user=Depends(deps.get_current_user),
+):
+    """Get active bots summary for dashboard display."""
+    from datetime import date
+    
+    # Get all active bots for this user
+    active_bots = db.query(MLModel).filter(
+        MLModel.user_id == current_user.id,
+        MLModel.is_active == True,
+    ).all()
+    
+    if not active_bots:
+        return {
+            "active_count": 0,
+            "bots": [],
+            "total_signals_today": 0,
+        }
+    
+    today = date.today()
+    total_signals_today = 0
+    bots_data = []
+    
+    for bot in active_bots:
+        # Get today's predictions count
+        today_predictions = db.query(MLPrediction).filter(
+            MLPrediction.model_id == bot.id,
+            MLPrediction.created_at >= datetime.combine(today, datetime.min.time()),
+        ).count()
+        
+        total_signals_today += today_predictions
+        
+        # Get last prediction
+        last_prediction = db.query(MLPrediction).filter(
+            MLPrediction.model_id == bot.id,
+        ).order_by(MLPrediction.created_at.desc()).first()
+        
+        last_pred_data = None
+        if last_prediction and last_prediction.prediction:
+            pred = last_prediction.prediction
+            last_pred_data = {
+                "direction": pred.get("direction", "HOLD"),
+                "confidence": pred.get("confidence", 0),
+                "entry_price": pred.get("entry_price"),
+                "created_at": last_prediction.created_at.isoformat() if last_prediction.created_at else None,
+            }
+        
+        # Get strategy name if linked
+        strategy_name = None
+        if bot.strategy_id:
+            strategy = db.query(Strategy).filter(Strategy.id == bot.strategy_id).first()
+            strategy_name = strategy.name if strategy else None
+        
+        bots_data.append({
+            "id": str(bot.id),
+            "name": bot.name or "Unnamed Bot",
+            "model_type": bot.model_type or "unknown",
+            "symbol": bot.symbol or "EURUSD",
+            "timeframe": bot.timeframe or "H1",
+            "strategy_name": strategy_name,
+            "accuracy": (bot.performance_metrics or {}).get("accuracy", 0),
+            "last_prediction": last_pred_data,
+            "today_signals": today_predictions,
+            "is_active": True,
+        })
+    
+    return {
+        "active_count": len(active_bots),
+        "bots": bots_data,
+        "total_signals_today": total_signals_today,
+    }

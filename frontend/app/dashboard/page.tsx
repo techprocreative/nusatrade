@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useDashboardStats } from "@/hooks/api";
 import { Skeleton } from "@/components/loading/Skeleton";
+import { ActiveBotsCard } from "@/components/dashboard/ActiveBotsCard";
 import {
   Wallet,
   TrendingUp,
@@ -218,6 +219,9 @@ export default function DashboardPage() {
           </Card>
         </div>
       )}
+
+      {/* Active ML Bots */}
+      <ActiveBotsCard />
 
       {/* Quick Actions */}
       <div>

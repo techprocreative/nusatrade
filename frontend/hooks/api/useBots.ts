@@ -241,3 +241,40 @@ export function usePredictionHistory(modelId: string | null) {
     enabled: !!modelId,
   });
 }
+
+// Active bots data type
+export interface ActiveBotData {
+  id: string;
+  name: string;
+  model_type: string;
+  symbol: string;
+  timeframe: string;
+  strategy_name?: string;
+  accuracy: number;
+  last_prediction?: {
+    direction: 'BUY' | 'SELL' | 'HOLD';
+    confidence: number;
+    entry_price?: number;
+    created_at?: string;
+  };
+  today_signals: number;
+  is_active: boolean;
+}
+
+export interface ActiveBotsResponse {
+  active_count: number;
+  bots: ActiveBotData[];
+  total_signals_today: number;
+}
+
+// Get active bots for dashboard
+export function useActiveBots() {
+  return useQuery<ActiveBotsResponse>({
+    queryKey: ['active-bots'],
+    queryFn: async () => {
+      const response = await apiClient.get('/api/v1/ml/dashboard/active-bots');
+      return response.data;
+    },
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+}
