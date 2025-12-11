@@ -53,6 +53,27 @@ export function useGenerateStrategy() {
           },
           body: JSON.stringify(request),
         }).then(async (response) => {
+          // Fallback to regular endpoint if streaming not available (404)
+          if (response.status === 404) {
+            onProgress?.('Using standard endpoint...');
+            const fallbackResponse = await fetch(`${baseUrl}/api/v1/ai/generate-strategy`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+              },
+              body: JSON.stringify(request),
+            });
+            if (!fallbackResponse.ok) {
+              const error = await fallbackResponse.json().catch(() => ({ detail: 'Request failed' }));
+              reject(new Error(error.detail || 'Failed to generate strategy'));
+              return;
+            }
+            const data = await fallbackResponse.json();
+            resolve(data as AIStrategyResponse);
+            return;
+          }
+
           if (!response.ok) {
             const error = await response.json().catch(() => ({ detail: 'Request failed' }));
             reject(new Error(error.detail || 'Failed to generate strategy'));
