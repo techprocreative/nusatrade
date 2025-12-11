@@ -14,6 +14,15 @@ export function useMLModels() {
   });
 }
 
+// Helper to safely extract error message
+const getErrorMessage = (error: any): string => {
+  const detail = error.response?.data?.detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) return detail.map(d => d.msg).join(', ');
+  if (typeof detail === 'object') return JSON.stringify(detail);
+  return 'An unexpected error occurred';
+};
+
 // Create ML model
 export function useCreateMLModel() {
   const queryClient = useQueryClient();
@@ -42,7 +51,7 @@ export function useCreateMLModel() {
       toast({
         variant: 'destructive',
         title: 'Creation Failed',
-        description: error.response?.data?.detail || 'Failed to create model',
+        description: getErrorMessage(error),
       });
     },
   });
@@ -71,7 +80,7 @@ export function useToggleMLModel() {
       toast({
         variant: 'destructive',
         title: 'Update Failed',
-        description: error.response?.data?.detail || 'Failed to update model',
+        description: getErrorMessage(error),
       });
     },
   });
@@ -83,7 +92,8 @@ export function useTrainMLModel() {
 
   return useMutation({
     mutationFn: async (modelId: string) => {
-      const response = await apiClient.post(`/api/v1/ml/models/${modelId}/train`);
+      // Send empty object as body to satisfy Pydantic validation
+      const response = await apiClient.post(`/api/v1/ml/models/${modelId}/train`, {});
       return response.data;
     },
     onSuccess: () => {
@@ -96,7 +106,7 @@ export function useTrainMLModel() {
       toast({
         variant: 'destructive',
         title: 'Training Failed',
-        description: error.response?.data?.detail || 'Failed to start training',
+        description: getErrorMessage(error),
       });
     },
   });
@@ -122,7 +132,7 @@ export function useDeleteMLModel() {
       toast({
         variant: 'destructive',
         title: 'Delete Failed',
-        description: error.response?.data?.detail || 'Failed to delete model',
+        description: getErrorMessage(error),
       });
     },
   });
@@ -147,7 +157,7 @@ export function useGetPrediction() {
       toast({
         variant: 'destructive',
         title: 'Prediction Failed',
-        description: error.response?.data?.detail || 'Failed to get prediction',
+        description: getErrorMessage(error),
       });
     },
   });
@@ -159,9 +169,9 @@ export function useExecutePrediction() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (data: { 
-      modelId: string; 
-      predictionId: string; 
+    mutationFn: async (data: {
+      modelId: string;
+      predictionId: string;
       lotSize: number;
       connectionId?: string;
     }) => {
@@ -184,7 +194,7 @@ export function useExecutePrediction() {
       toast({
         variant: 'destructive',
         title: 'Execution Failed',
-        description: error.response?.data?.detail || 'Failed to execute trade',
+        description: getErrorMessage(error),
       });
     },
   });
