@@ -208,11 +208,11 @@ export default function TradingPage() {
                     <tr key={trade.id} className="border-b border-border/50">
                       <td className="py-3 px-2">{trade.symbol}</td>
                       <td className={`px-2 ${trade.trade_type === "BUY" ? "text-green-500" : "text-red-500"}`}>{trade.trade_type}</td>
-                      <td className="text-right px-2">{trade.lot_size}</td>
-                      <td className="text-right text-muted-foreground px-2">{trade.open_price.toFixed(5)}</td>
-                      <td className="text-right text-muted-foreground px-2">{trade.close_price.toFixed(5)}</td>
-                      <td className={`text-right font-semibold px-2 ${trade.profit >= 0 ? "text-green-500" : "text-red-500"}`}>${trade.profit.toFixed(2)}</td>
-                      <td className="text-right text-muted-foreground text-xs px-2 hidden sm:table-cell">{new Date(trade.close_time).toLocaleString()}</td>
+                      <td className="text-right px-2">{trade.lot_size ?? "-"}</td>
+                      <td className="text-right text-muted-foreground px-2">{trade.open_price?.toFixed(5) ?? "-"}</td>
+                      <td className="text-right text-muted-foreground px-2">{trade.close_price?.toFixed(5) ?? "-"}</td>
+                      <td className={`text-right font-semibold px-2 ${(trade.profit ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`}>${trade.profit?.toFixed(2) ?? "0.00"}</td>
+                      <td className="text-right text-muted-foreground text-xs px-2 hidden sm:table-cell">{trade.close_time ? new Date(trade.close_time).toLocaleString() : "-"}</td>
                     </tr>
                   ))}
                 </tbody>
