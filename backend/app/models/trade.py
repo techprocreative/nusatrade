@@ -29,6 +29,7 @@ class Trade(Base):
     magic_number = Column(Integer)
     comment = Column(String)
     source = Column(String(50))
+    status = Column(String(20), default="open")  # open, closed, pending
     ml_model_id = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 

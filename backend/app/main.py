@@ -25,6 +25,9 @@ init_sentry()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from apscheduler.triggers.interval import IntervalTrigger
+    
     # Startup
     setup_logging()
     logger.info(f"Starting {settings.app_name} in {settings.environment} mode")
@@ -34,9 +37,31 @@ async def lifespan(app: FastAPI):
     if settings.jwt_secret == "your-secret-key" or len(settings.jwt_secret) < 32:
         logger.warning("⚠️  JWT_SECRET not set or too short! Set a strong secret in production.")
     
+    # Setup auto-trading scheduler
+    scheduler = AsyncIOScheduler()
+    
+    try:
+        from app.services.auto_trading import run_auto_trading
+        
+        # Run auto-trading every 15 minutes
+        scheduler.add_job(
+            run_auto_trading,
+            trigger=IntervalTrigger(minutes=15),
+            id="auto_trading",
+            name="Auto Trading Scheduler",
+            replace_existing=True,
+        )
+        scheduler.start()
+        logger.info("✅ Auto-trading scheduler started (interval: 15 minutes)")
+    except Exception as e:
+        logger.warning(f"⚠️  Failed to start auto-trading scheduler: {e}")
+    
     yield
     
     # Shutdown
+    if scheduler.running:
+        scheduler.shutdown()
+        logger.info("Auto-trading scheduler stopped")
     logger.info(f"Shutting down {settings.app_name}")
 
 

@@ -784,3 +784,69 @@ def get_active_bots_stats(
         "bots": bots_data,
         "total_signals_today": total_signals_today,
     }
+
+
+@router.post("/auto-trading/trigger")
+async def trigger_auto_trading(
+    db: Session = Depends(deps.get_db),
+    current_user=Depends(deps.get_current_user),
+):
+    """Manually trigger auto-trading cycle for testing."""
+    from app.services.auto_trading import auto_trading_service
+    
+    # Check if user has any active models
+    active_count = db.query(MLModel).filter(
+        MLModel.user_id == current_user.id,
+        MLModel.is_active == True,
+    ).count()
+    
+    if active_count == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="No active models found. Activate a trained model first."
+        )
+    
+    # Run auto-trading cycle
+    result = await auto_trading_service.run_auto_trading_cycle()
+    
+    return {
+        "status": "completed",
+        "result": result,
+    }
+
+
+@router.get("/auto-trading/status")
+def get_auto_trading_status(
+    db: Session = Depends(deps.get_db),
+    current_user=Depends(deps.get_current_user),
+):
+    """Get auto-trading status and configuration."""
+    from app.services.auto_trading import auto_trading_service
+    
+    # Get active models count
+    active_models = db.query(MLModel).filter(
+        MLModel.user_id == current_user.id,
+        MLModel.is_active == True,
+        MLModel.file_path != None,
+    ).count()
+    
+    # Get today's auto trades
+    from datetime import date
+    today = date.today()
+    today_trades = db.query(MLPrediction).join(MLModel).filter(
+        MLModel.user_id == current_user.id,
+        MLPrediction.created_at >= datetime.combine(today, datetime.min.time()),
+    ).count()
+    
+    return {
+        "scheduler_running": True,  # Will be True when app is running
+        "interval_minutes": 15,
+        "active_models": active_models,
+        "predictions_today": today_trades,
+        "last_run": auto_trading_service._last_run.isoformat() if auto_trading_service._last_run else None,
+        "config": {
+            "default_confidence_threshold": 0.70,
+            "default_max_trades_per_day": 5,
+            "default_cooldown_minutes": 30,
+        }
+    }
