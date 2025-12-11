@@ -12,8 +12,11 @@ class MLModel(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    strategy_id = Column(UUID(as_uuid=True), ForeignKey("strategies.id"), nullable=True)
     name = Column(String(255))
     model_type = Column(String(50))
+    symbol = Column(String(20), default="EURUSD")
+    timeframe = Column(String(10), default="H1")
     config = Column(JSON)
     performance_metrics = Column(JSON)
     file_path = Column(String(500))

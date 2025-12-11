@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/api-client';
-import type { MLModel } from '@/types';
+import type { MLModel, MLPrediction } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
 // Fetch ML models
@@ -23,6 +23,9 @@ export function useCreateMLModel() {
     mutationFn: async (data: {
       name: string;
       model_type: string;
+      symbol: string;
+      timeframe: string;
+      strategy_id?: string;
       config?: Record<string, any>;
     }) => {
       const response = await apiClient.post('/api/v1/ml/models', data);
@@ -122,5 +125,80 @@ export function useDeleteMLModel() {
         description: error.response?.data?.detail || 'Failed to delete model',
       });
     },
+  });
+}
+
+// Get prediction from model
+export function useGetPrediction() {
+  const { toast } = useToast();
+
+  return useMutation<MLPrediction, Error, { modelId: string; symbol: string }>({
+    mutationFn: async ({ modelId, symbol }) => {
+      const response = await apiClient.post(`/api/v1/ml/models/${modelId}/predict`, { symbol });
+      return response.data;
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Signal Generated',
+        description: 'ML prediction has been generated successfully.',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: 'destructive',
+        title: 'Prediction Failed',
+        description: error.response?.data?.detail || 'Failed to get prediction',
+      });
+    },
+  });
+}
+
+// Execute trade from prediction
+export function useExecutePrediction() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (data: { 
+      modelId: string; 
+      predictionId: string; 
+      lotSize: number;
+      connectionId?: string;
+    }) => {
+      const response = await apiClient.post(`/api/v1/ml/models/${data.modelId}/execute`, {
+        prediction_id: data.predictionId,
+        lot_size: data.lotSize,
+        connection_id: data.connectionId,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['positions'] });
+      queryClient.invalidateQueries({ queryKey: ['trades'] });
+      toast({
+        title: 'Trade Executed',
+        description: 'Trade has been executed from ML signal.',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: 'destructive',
+        title: 'Execution Failed',
+        description: error.response?.data?.detail || 'Failed to execute trade',
+      });
+    },
+  });
+}
+
+// Get prediction history
+export function usePredictionHistory(modelId: string | null) {
+  return useQuery<MLPrediction[]>({
+    queryKey: ['predictions', modelId],
+    queryFn: async () => {
+      if (!modelId) throw new Error('No model ID');
+      const response = await apiClient.get(`/api/v1/ml/models/${modelId}/predictions`);
+      return response.data;
+    },
+    enabled: !!modelId,
   });
 }

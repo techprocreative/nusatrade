@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.models.ml import MLModel, MLPrediction
+from app.models.strategy import Strategy
 from app.ml.features import FeatureEngineer
 from app.ml.training import Trainer
 
@@ -25,6 +26,7 @@ class ModelCreateRequest(BaseModel):
     model_type: str = "random_forest"  # random_forest, xgboost, lstm
     symbol: str = "EURUSD"
     timeframe: str = "H1"
+    strategy_id: Optional[str] = None
     config: Optional[dict] = None
 
 
@@ -34,6 +36,10 @@ class ModelResponse(BaseModel):
     id: str
     name: str
     model_type: str
+    symbol: str
+    timeframe: str
+    strategy_id: Optional[str] = None
+    strategy_name: Optional[str] = None
     is_active: bool
     performance_metrics: Optional[dict]
     created_at: datetime
@@ -53,11 +59,19 @@ class PredictionRequest(BaseModel):
 class PredictionResponse(BaseModel):
     model_config = {"protected_namespaces": ()}
     
+    id: str
     model_id: str
     symbol: str
     prediction: dict
     confidence: float
+    strategy_rules: Optional[dict] = None
     created_at: datetime
+
+
+class ExecuteRequest(BaseModel):
+    prediction_id: str
+    lot_size: float = 0.1
+    connection_id: Optional[str] = None
 
 
 @router.get("/models", response_model=List[ModelResponse])
@@ -72,17 +86,27 @@ def list_models(
         MLModel.user_id == current_user.id
     ).offset(skip).limit(limit).all()
     
-    return [
-        ModelResponse(
+    result = []
+    for m in models:
+        strategy_name = None
+        if m.strategy_id:
+            strategy = db.query(Strategy).filter(Strategy.id == m.strategy_id).first()
+            strategy_name = strategy.name if strategy else None
+        
+        result.append(ModelResponse(
             id=str(m.id),
             name=m.name or "Unnamed Model",
             model_type=m.model_type or "unknown",
+            symbol=m.symbol or "EURUSD",
+            timeframe=m.timeframe or "H1",
+            strategy_id=str(m.strategy_id) if m.strategy_id else None,
+            strategy_name=strategy_name,
             is_active=m.is_active or False,
             performance_metrics=m.performance_metrics,
             created_at=m.created_at or datetime.utcnow(),
-        )
-        for m in models
-    ]
+        ))
+    
+    return result
 
 
 @router.post("/models", response_model=ModelResponse)
@@ -92,16 +116,27 @@ def create_model(
     current_user=Depends(deps.get_current_user),
 ):
     """Create a new ML model configuration."""
+    # Validate strategy_id if provided
+    strategy = None
+    strategy_name = None
+    if request.strategy_id:
+        strategy = db.query(Strategy).filter(
+            Strategy.id == request.strategy_id,
+            (Strategy.user_id == current_user.id) | (Strategy.is_public == True),
+        ).first()
+        if not strategy:
+            raise HTTPException(status_code=404, detail="Strategy not found")
+        strategy_name = strategy.name
+    
     model = MLModel(
         id=uuid4(),
         user_id=current_user.id,
+        strategy_id=strategy.id if strategy else None,
         name=request.name,
         model_type=request.model_type,
-        config={
-            "symbol": request.symbol,
-            "timeframe": request.timeframe,
-            **(request.config or {}),
-        },
+        symbol=request.symbol,
+        timeframe=request.timeframe,
+        config=request.config or {},
         is_active=False,
         created_at=datetime.utcnow(),
     )
@@ -113,6 +148,10 @@ def create_model(
         id=str(model.id),
         name=model.name,
         model_type=model.model_type,
+        symbol=model.symbol,
+        timeframe=model.timeframe,
+        strategy_id=str(model.strategy_id) if model.strategy_id else None,
+        strategy_name=strategy_name,
         is_active=model.is_active,
         performance_metrics=model.performance_metrics,
         created_at=model.created_at,
@@ -134,10 +173,19 @@ def get_model(
     if not model:
         raise HTTPException(status_code=404, detail="Model not found")
 
+    strategy_name = None
+    if model.strategy_id:
+        strategy = db.query(Strategy).filter(Strategy.id == model.strategy_id).first()
+        strategy_name = strategy.name if strategy else None
+
     return ModelResponse(
         id=str(model.id),
         name=model.name or "Unnamed",
         model_type=model.model_type or "unknown",
+        symbol=model.symbol or "EURUSD",
+        timeframe=model.timeframe or "H1",
+        strategy_id=str(model.strategy_id) if model.strategy_id else None,
+        strategy_name=strategy_name,
         is_active=model.is_active or False,
         performance_metrics=model.performance_metrics,
         created_at=model.created_at or datetime.utcnow(),
@@ -160,13 +208,24 @@ def update_model(
     if not model:
         raise HTTPException(status_code=404, detail="Model not found")
 
+    # Validate strategy_id if provided
+    strategy = None
+    strategy_name = None
+    if request.strategy_id:
+        strategy = db.query(Strategy).filter(
+            Strategy.id == request.strategy_id,
+            (Strategy.user_id == current_user.id) | (Strategy.is_public == True),
+        ).first()
+        if not strategy:
+            raise HTTPException(status_code=404, detail="Strategy not found")
+        strategy_name = strategy.name
+
     model.name = request.name
     model.model_type = request.model_type
-    model.config = {
-        "symbol": request.symbol,
-        "timeframe": request.timeframe,
-        **(request.config or {}),
-    }
+    model.symbol = request.symbol
+    model.timeframe = request.timeframe
+    model.strategy_id = strategy.id if strategy else None
+    model.config = request.config or {}
     model.updated_at = datetime.utcnow()
     db.commit()
 
@@ -174,6 +233,10 @@ def update_model(
         id=str(model.id),
         name=model.name,
         model_type=model.model_type,
+        symbol=model.symbol,
+        timeframe=model.timeframe,
+        strategy_id=str(model.strategy_id) if model.strategy_id else None,
+        strategy_name=strategy_name,
         is_active=model.is_active or False,
         performance_metrics=model.performance_metrics,
         created_at=model.created_at or datetime.utcnow(),
@@ -284,10 +347,12 @@ def get_model_predictions(
 
     return [
         PredictionResponse(
+            id=str(p.id),
             model_id=str(p.model_id),
             symbol=p.symbol or "UNKNOWN",
             prediction=p.prediction or {},
             confidence=float(p.prediction.get("confidence", 0)) if p.prediction else 0,
+            strategy_rules=p.prediction.get("strategy_rules") if p.prediction else None,
             created_at=p.created_at or datetime.utcnow(),
         )
         for p in predictions
@@ -318,11 +383,21 @@ def make_prediction(
     if not model:
         raise HTTPException(status_code=404, detail="Model not found")
 
-    if not model.file_path:
-        raise HTTPException(
-            status_code=400,
-            detail="Model not trained yet. Please train the model first.",
-        )
+    # Load linked strategy if exists
+    strategy = None
+    strategy_rules = None
+    if model.strategy_id:
+        strategy = db.query(Strategy).filter(Strategy.id == model.strategy_id).first()
+        if strategy:
+            # Extract strategy rules for response
+            entry_rules = []
+            exit_rules = []
+            if strategy.entry_rules:
+                entry_rules = [r.get("description", r.get("condition", "")) for r in strategy.entry_rules]
+            if strategy.exit_rules:
+                exit_rules = [r.get("description", r.get("condition", "")) for r in strategy.exit_rules]
+            if entry_rules or exit_rules:
+                strategy_rules = {"entry_rules": entry_rules, "exit_rules": exit_rules}
 
     # Generate prediction (simplified - in production, load actual model)
     import random
@@ -343,9 +418,24 @@ def make_prediction(
     # Add small random variation
     entry_price = round(entry_price * (1 + random.uniform(-0.001, 0.001)), 5)
     
-    # Calculate SL/TP based on risk profile from model config or default
-    risk_profile = model.config.get("risk_profile", "moderate") if model.config else "moderate"
-    risk_config = get_risk_config(risk_profile)
+    # Use Strategy's risk_management settings if available, otherwise use default
+    risk_profile = "moderate"
+    if strategy and strategy.risk_management:
+        rm = strategy.risk_management
+        risk_config = RiskConfig(
+            sl_type=SLType(rm.get("stop_loss_type", "atr_based")),
+            sl_value=rm.get("stop_loss_value", 2.0),
+            tp_type=TPType(rm.get("take_profit_type", "risk_reward")),
+            tp_value=rm.get("take_profit_value", 2.0),
+            risk_per_trade_percent=rm.get("risk_per_trade_percent", 2.0),
+            max_position_size=rm.get("max_position_size", 0.1),
+        )
+        risk_profile = "from_strategy"
+    elif model.config and model.config.get("risk_profile"):
+        risk_profile = model.config.get("risk_profile", "moderate")
+        risk_config = get_risk_config(risk_profile)
+    else:
+        risk_config = get_risk_config(risk_profile)
     
     # For simplicity, use estimated ATR based on symbol volatility
     estimated_atr = {
@@ -368,6 +458,25 @@ def make_prediction(
             atr=estimated_atr,
         )
 
+    # Build trailing stop config from strategy if available
+    trailing_stop_config = None
+    if direction != "HOLD":
+        if strategy and strategy.risk_management and strategy.risk_management.get("trailing_stop"):
+            ts = strategy.risk_management["trailing_stop"]
+            trailing_stop_config = {
+                "enabled": ts.get("enabled", True),
+                "activation_pips": ts.get("activation_pips", 20),
+                "trail_distance_pips": ts.get("trail_distance_pips", 15),
+                "breakeven_pips": ts.get("breakeven_pips", 15),
+            }
+        else:
+            trailing_stop_config = {
+                "enabled": True,
+                "activation_pips": 20,
+                "trail_distance_pips": 15,
+                "breakeven_pips": 15,
+            }
+
     prediction_data = {
         "direction": direction,
         "confidence": confidence,
@@ -378,17 +487,14 @@ def make_prediction(
         "sl_type": risk_config.sl_type.value,
         "tp_type": risk_config.tp_type.value,
         "risk_reward_ratio": round(abs(take_profit - entry_price) / abs(entry_price - stop_loss), 2) if stop_loss and take_profit and stop_loss != entry_price else None,
-        "trailing_stop": {
-            "enabled": True,
-            "activation_pips": 20,
-            "trail_distance_pips": 15,
-            "breakeven_pips": 15,
-        } if direction != "HOLD" else None,
+        "trailing_stop": trailing_stop_config,
+        "strategy_rules": strategy_rules,
     }
 
     # Save prediction
+    prediction_id = uuid4()
     prediction = MLPrediction(
-        id=uuid4(),
+        id=prediction_id,
         model_id=model.id,
         symbol=request.symbol,
         prediction=prediction_data,
@@ -398,10 +504,12 @@ def make_prediction(
     db.commit()
 
     return PredictionResponse(
+        id=str(prediction_id),
         model_id=str(model.id),
         symbol=request.symbol,
         prediction=prediction_data,
         confidence=confidence,
+        strategy_rules=strategy_rules,
         created_at=prediction.created_at,
     )
 
@@ -458,3 +566,66 @@ def deactivate_model(
     db.commit()
 
     return {"id": model_id, "status": "inactive"}
+
+
+@router.post("/models/{model_id}/execute")
+async def execute_prediction(
+    model_id: str,
+    request: ExecuteRequest,
+    db: Session = Depends(deps.get_db),
+    current_user=Depends(deps.get_current_user),
+):
+    """Execute a trade based on ML prediction."""
+    from app.services import trading_service
+    
+    # Verify model ownership
+    model = db.query(MLModel).filter(
+        MLModel.id == model_id,
+        MLModel.user_id == current_user.id,
+    ).first()
+
+    if not model:
+        raise HTTPException(status_code=404, detail="Model not found")
+
+    # Get the prediction
+    prediction = db.query(MLPrediction).filter(
+        MLPrediction.id == request.prediction_id,
+        MLPrediction.model_id == model_id,
+    ).first()
+
+    if not prediction:
+        raise HTTPException(status_code=404, detail="Prediction not found")
+
+    pred_data = prediction.prediction or {}
+    direction = pred_data.get("direction")
+    
+    if direction == "HOLD":
+        raise HTTPException(status_code=400, detail="Cannot execute HOLD signal")
+
+    # Execute trade using trading service
+    try:
+        trade, mt5_result = await trading_service.open_order_with_mt5(
+            db,
+            current_user.id,
+            symbol=prediction.symbol,
+            order_type=direction,
+            lot_size=request.lot_size,
+            price=pred_data.get("entry_price", 0),
+            stop_loss=pred_data.get("stop_loss"),
+            take_profit=pred_data.get("take_profit"),
+            connection_id=request.connection_id,
+        )
+
+        return {
+            "success": True,
+            "trade_id": str(trade.id),
+            "prediction_id": request.prediction_id,
+            "direction": direction,
+            "entry_price": pred_data.get("entry_price"),
+            "stop_loss": pred_data.get("stop_loss"),
+            "take_profit": pred_data.get("take_profit"),
+            "lot_size": request.lot_size,
+            "mt5_execution": mt5_result,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to execute trade: {str(e)}")

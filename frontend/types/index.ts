@@ -109,12 +109,42 @@ export interface MLModel {
   id: string;
   name: string;
   model_type: string;
+  symbol: string;
+  timeframe: string;
+  strategy_id?: string;
+  strategy_name?: string;
   is_active: boolean;
   performance_metrics: {
     accuracy?: number;
     precision?: number;
     f1_score?: number;
   } | null;
+  created_at: string;
+}
+
+export interface MLPrediction {
+  id: string;
+  model_id: string;
+  symbol: string;
+  prediction: {
+    direction: 'BUY' | 'SELL' | 'HOLD';
+    confidence: number;
+    entry_price: number;
+    stop_loss?: number;
+    take_profit?: number;
+    risk_reward_ratio?: number;
+    trailing_stop?: {
+      enabled: boolean;
+      activation_pips: number;
+      trail_distance_pips: number;
+      breakeven_pips: number;
+    };
+  };
+  confidence: number;
+  strategy_rules?: {
+    entry_rules: string[];
+    exit_rules: string[];
+  };
   created_at: string;
 }
 
