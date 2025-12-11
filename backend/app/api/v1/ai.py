@@ -1,10 +1,12 @@
 """AI Supervisor API with LLM integration."""
 
+import asyncio
 from datetime import datetime
 from typing import List, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -747,6 +749,131 @@ Return ONLY the JSON, no additional text."""
             status_code=500,
             detail=f"Failed to generate strategy: {str(e)}"
         )
+
+
+@router.post("/generate-strategy-stream")
+async def generate_strategy_stream(
+    request: AIStrategyRequest,
+    db: Session = Depends(deps.get_db),
+    current_user=Depends(deps.get_current_user),
+):
+    """Generate a trading strategy with SSE streaming to prevent timeout.
+    
+    This endpoint sends keepalive events every 5 seconds while the LLM
+    is generating the strategy. This prevents Render's 30-second timeout.
+    
+    Event types:
+    - keepalive: Sent every 5 seconds to keep connection alive
+    - progress: Sent with status updates
+    - result: Final strategy JSON
+    - error: Error message if generation fails
+    """
+    import json as json_module
+    import re
+    
+    async def generate():
+        # Send initial progress event
+        yield f"event: progress\ndata: {{\"status\": \"Starting strategy generation...\"}}\n\n"
+        
+        # Ensure LLM client is initialized with database config
+        if not llm_client._db_config_loaded:
+            llm_client.reload_config(db)
+        
+        # Build the prompt
+        indicators_text = ""
+        if request.preferred_indicators:
+            indicators_text = f"\nPreferred indicators to use: {', '.join(request.preferred_indicators)}"
+        
+        user_prompt = f"""Create a trading strategy based on this description:
+"{request.prompt}"
+
+Parameters:
+- Symbol: {request.symbol}
+- Timeframe: {request.timeframe}
+- Risk Profile: {request.risk_profile}
+{indicators_text}
+
+Generate a complete strategy in JSON format as specified in the system prompt.
+Return ONLY the JSON, no additional text."""
+
+        yield f"event: progress\ndata: {{\"status\": \"Calling AI model...\"}}\n\n"
+        
+        # Run LLM call in background with keepalive
+        llm_task = asyncio.create_task(
+            llm_client.chat(
+                [{"role": "user", "content": user_prompt}],
+                STRATEGY_SYSTEM_PROMPT,
+            )
+        )
+        
+        # Send keepalive events while waiting for LLM
+        keepalive_count = 0
+        while not llm_task.done():
+            await asyncio.sleep(5)  # Wait 5 seconds
+            if not llm_task.done():
+                keepalive_count += 1
+                yield f"event: keepalive\ndata: {{\"count\": {keepalive_count}, \"message\": \"Still generating...\"}}\n\n"
+        
+        try:
+            reply, tokens = await llm_task
+            
+            yield f"event: progress\ndata: {{\"status\": \"Parsing response...\"}}\n\n"
+            
+            # Parse the JSON response
+            json_match = re.search(r'\{[\s\S]*\}', reply)
+            if json_match:
+                strategy_data = json_module.loads(json_match.group())
+            else:
+                raise ValueError("No valid JSON found in response")
+            
+            # Create response
+            strategy = GeneratedStrategy(
+                id=str(uuid4()),
+                name=strategy_data.get("name", "AI Generated Strategy"),
+                description=strategy_data.get("description", request.prompt[:200]),
+                strategy_type="ai_generated",
+                code=strategy_data.get("code", "# No code generated"),
+                parameters=[
+                    StrategyParameter(**p) for p in strategy_data.get("parameters", [])
+                ],
+                indicators=strategy_data.get("indicators", []),
+                entry_rules=[
+                    StrategyRule(**r) for r in strategy_data.get("entry_rules", [])
+                ],
+                exit_rules=[
+                    StrategyRule(**r) for r in strategy_data.get("exit_rules", [])
+                ],
+                risk_management=RiskManagement(**strategy_data.get("risk_management", {})),
+            )
+            
+            response = AIStrategyResponse(
+                strategy=strategy,
+                explanation=strategy_data.get("explanation", "Strategy generated based on your description."),
+                warnings=strategy_data.get("warnings", []),
+                suggested_improvements=strategy_data.get("suggested_improvements", []),
+            )
+            
+            # Send final result
+            yield f"event: result\ndata: {response.model_dump_json()}\n\n"
+            
+        except json_module.JSONDecodeError as e:
+            logger.error(f"Failed to parse AI response as JSON: {e}")
+            fallback = create_fallback_strategy(request)
+            yield f"event: result\ndata: {fallback.model_dump_json()}\n\n"
+        except Exception as e:
+            logger.error(f"Strategy generation error: {e}")
+            error_data = json_module.dumps({"error": str(e)})
+            yield f"event: error\ndata: {error_data}\n\n"
+    
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        }
+    )
 
 
 def create_fallback_strategy(request: AIStrategyRequest) -> AIStrategyResponse:

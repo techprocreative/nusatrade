@@ -34,14 +34,93 @@ export function useStrategy(id: string | null) {
   });
 }
 
-// Generate strategy with AI
+// Generate strategy with AI using SSE streaming
 export function useGenerateStrategy() {
   const { toast } = useToast();
 
-  return useMutation<AIStrategyResponse, Error, AIStrategyRequest>({
-    mutationFn: async (request) => {
-      const response = await apiClient.post('/api/v1/ai/generate-strategy', request);
-      return response.data;
+  return useMutation<AIStrategyResponse, Error, AIStrategyRequest & { onProgress?: (status: string) => void }>({
+    mutationFn: async ({ onProgress, ...request }) => {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+      return new Promise((resolve, reject) => {
+        // Use fetch with streaming for SSE
+        fetch(`${baseUrl}/api/v1/ai/generate-strategy-stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify(request),
+        }).then(async (response) => {
+          if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: 'Request failed' }));
+            reject(new Error(error.detail || 'Failed to generate strategy'));
+            return;
+          }
+
+          const reader = response.body?.getReader();
+          if (!reader) {
+            reject(new Error('No response body'));
+            return;
+          }
+
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+
+            // Parse SSE events
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop() || '';
+
+            for (const eventBlock of lines) {
+              if (!eventBlock.trim()) continue;
+
+              const eventLines = eventBlock.split('\n');
+              let eventType = 'message';
+              let data = '';
+
+              for (const line of eventLines) {
+                if (line.startsWith('event: ')) {
+                  eventType = line.slice(7);
+                } else if (line.startsWith('data: ')) {
+                  data = line.slice(6);
+                }
+              }
+
+              if (!data) continue;
+
+              try {
+                const parsed = JSON.parse(data);
+
+                switch (eventType) {
+                  case 'progress':
+                    onProgress?.(parsed.status);
+                    break;
+                  case 'keepalive':
+                    onProgress?.(`Generating... (${parsed.count * 5}s)`);
+                    break;
+                  case 'result':
+                    resolve(parsed as AIStrategyResponse);
+                    return;
+                  case 'error':
+                    reject(new Error(parsed.error || 'Generation failed'));
+                    return;
+                }
+              } catch {
+                // Ignore parse errors for incomplete events
+              }
+            }
+          }
+
+          reject(new Error('Stream ended without result'));
+        }).catch(reject);
+      });
     },
     onSuccess: () => {
       toast({
@@ -53,7 +132,7 @@ export function useGenerateStrategy() {
       toast({
         variant: 'destructive',
         title: 'Generation Failed',
-        description: error.response?.data?.detail || 'Failed to generate strategy',
+        description: error.message || 'Failed to generate strategy',
       });
     },
   });
