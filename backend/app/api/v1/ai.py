@@ -139,10 +139,14 @@ class LLMClient:
                 response = self.client.chat.completions.create(
                     model=self._current_model or settings.effective_llm_config["model"],
                     messages=full_messages,
-                    max_tokens=1000,
+                    max_tokens=2000,  # Increased for strategy generation
                     temperature=0.7,
                 )
                 content = response.choices[0].message.content
+                # Handle null content from some LLM providers
+                if content is None:
+                    logger.warning("LLM returned null content, using fallback")
+                    raise ValueError("LLM returned empty response")
                 tokens = response.usage.total_tokens if response.usage else 0
                 return content, tokens
             except Exception as e:
