@@ -59,9 +59,11 @@ class Settings(BaseSettings):
     ws_heartbeat_interval: int = 30
     ws_connection_timeout: int = 60
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "protected_namespaces": ("model_",),  # Fix Pydantic warning for settings_encryption_key
+    }
 
     def cors_origins(self) -> List[str]:
         if isinstance(self.backend_cors_origins, str):
@@ -92,6 +94,6 @@ def get_settings() -> Settings:
     if settings.is_production:
         if settings.jwt_secret == "change-me":
             raise RuntimeError("jwt_secret must be set in production")
-        if not settings.openai_api_key and not settings.anthropic_api_key:
-            raise RuntimeError("At least one LLM API key must be set in production")
+        if not settings.llm_api_key and not settings.openai_api_key and not settings.anthropic_api_key:
+            raise RuntimeError("At least one LLM API key (LLM_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY) must be set in production")
     return settings
