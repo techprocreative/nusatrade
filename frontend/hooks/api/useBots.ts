@@ -278,3 +278,60 @@ export function useActiveBots() {
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 }
+
+// Auto-trading status
+export interface AutoTradingStatus {
+  scheduler_running: boolean;
+  interval_minutes: number;
+  active_models: number;
+  predictions_today: number;
+  last_run: string | null;
+  config: {
+    default_confidence_threshold: number;
+    default_max_trades_per_day: number;
+    default_cooldown_minutes: number;
+  };
+}
+
+export function useAutoTradingStatus() {
+  return useQuery<AutoTradingStatus>({
+    queryKey: ['auto-trading-status'],
+    queryFn: async () => {
+      const response = await apiClient.get('/api/v1/ml/auto-trading/status');
+      return response.data;
+    },
+    refetchInterval: 60000, // Refresh every minute
+  });
+}
+
+// Trigger auto-trading manually
+export function useTriggerAutoTrading() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async () => {
+      const response = await apiClient.post('/api/v1/ml/auto-trading/trigger');
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['auto-trading-status'] });
+      queryClient.invalidateQueries({ queryKey: ['active-bots'] });
+      queryClient.invalidateQueries({ queryKey: ['positions'] });
+      queryClient.invalidateQueries({ queryKey: ['trades'] });
+
+      const result = data.result;
+      toast({
+        title: 'Auto-Trading Triggered',
+        description: `Checked ${result.models_checked} models. Predictions: ${result.predictions_generated}, Trades: ${result.trades_executed}`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: 'destructive',
+        title: 'Trigger Failed',
+        description: getErrorMessage(error),
+      });
+    },
+  });
+}

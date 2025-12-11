@@ -10,6 +10,8 @@ import {
   useGetPrediction,
   useExecutePrediction,
   useStrategies,
+  useAutoTradingStatus,
+  useTriggerAutoTrading,
 } from "@/hooks/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,13 +35,13 @@ import {
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { MLModel, MLPrediction, TrainingStatus } from "@/types";
-import { TrendingUp, TrendingDown, Zap, Brain, Target, Loader2, CheckCircle, XCircle, Clock } from "lucide-react";
+import { TrendingUp, TrendingDown, Zap, Brain, Target, Loader2, CheckCircle, XCircle, Clock, Play, RefreshCw } from "lucide-react";
 
-function StatCard({ label, value, icon, color }: { 
-  label: string; 
-  value: string; 
-  icon: string; 
-  color?: string 
+function StatCard({ label, value, icon, color }: {
+  label: string;
+  value: string;
+  icon: string;
+  color?: string
 }) {
   return (
     <Card>
@@ -63,9 +65,9 @@ function TrainingStatusBadge({ status }: { status: TrainingStatus }) {
     completed: { variant: "default", icon: <CheckCircle className="w-3 h-3" />, label: "Trained" },
     failed: { variant: "destructive", icon: <XCircle className="w-3 h-3" />, label: "Failed" },
   };
-  
+
   const config = variants[status] || variants.idle;
-  
+
   return (
     <Badge variant={config.variant} className="gap-1">
       {config.icon}
@@ -74,12 +76,12 @@ function TrainingStatusBadge({ status }: { status: TrainingStatus }) {
   );
 }
 
-function PredictionCard({ 
-  prediction, 
-  onExecute, 
-  isExecuting 
-}: { 
-  prediction: MLPrediction; 
+function PredictionCard({
+  prediction,
+  onExecute,
+  isExecuting
+}: {
+  prediction: MLPrediction;
   onExecute: (lotSize: number) => void;
   isExecuting: boolean;
 }) {
@@ -147,16 +149,16 @@ function PredictionCard({
             <div className="flex gap-2 items-end">
               <div className="flex-1 space-y-1">
                 <Label className="text-xs">Lot Size</Label>
-                <Input 
-                  type="number" 
-                  step="0.01" 
-                  min="0.01" 
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
                   max="10"
                   value={lotSize}
                   onChange={(e) => setLotSize(e.target.value)}
                 />
               </div>
-              <Button 
+              <Button
                 onClick={() => onExecute(parseFloat(lotSize))}
                 disabled={isExecuting}
                 className="flex-1"
@@ -194,12 +196,14 @@ export default function BotsPage() {
   // API hooks
   const { data: models = [], isLoading } = useMLModels();
   const { data: strategies = [] } = useStrategies();
+  const { data: autoTradingStatus } = useAutoTradingStatus();
   const createModelMutation = useCreateMLModel();
   const toggleModelMutation = useToggleMLModel();
   const trainModelMutation = useTrainMLModel();
   const deleteModelMutation = useDeleteMLModel();
   const getPredictionMutation = useGetPrediction();
   const executePredictionMutation = useExecutePrediction();
+  const triggerAutoTradingMutation = useTriggerAutoTrading();
 
   const handleCreateModel = async () => {
     await createModelMutation.mutateAsync({
@@ -264,7 +268,7 @@ export default function BotsPage() {
   const avgAccuracy =
     models.length > 0
       ? models.reduce((acc, m) => acc + (m.performance_metrics?.accuracy || 0), 0) /
-        models.length
+      models.length
       : 0;
 
   return (
@@ -301,6 +305,63 @@ export default function BotsPage() {
         <StatCard label="With Strategy" value={models.filter(m => m.strategy_id).length.toString()} icon="📋" />
       </div>
 
+      {/* Auto-Trading Status */}
+      {autoTradingStatus && (
+        <Card className="border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 to-transparent">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-emerald-500/20 rounded-lg">
+                  <RefreshCw className={`w-6 h-6 text-emerald-400 ${autoTradingStatus.scheduler_running ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white flex items-center gap-2">
+                    Auto-Trading Scheduler
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                  </h3>
+                  <p className="text-sm text-slate-400">
+                    Runs every {autoTradingStatus.interval_minutes} minutes •
+                    {autoTradingStatus.active_models} active models •
+                    {autoTradingStatus.predictions_today} predictions today
+                    {autoTradingStatus.last_run && (
+                      <span className="ml-2 text-slate-500">
+                        Last run: {new Date(autoTradingStatus.last_run).toLocaleTimeString()}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="text-right text-sm">
+                  <p className="text-slate-400">Confidence Threshold</p>
+                  <p className="font-semibold text-white">{(autoTradingStatus.config.default_confidence_threshold * 100).toFixed(0)}%</p>
+                </div>
+                <Button
+                  onClick={() => triggerAutoTradingMutation.mutate()}
+                  disabled={triggerAutoTradingMutation.isPending || autoTradingStatus.active_models === 0}
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                >
+                  {triggerAutoTradingMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Running...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4 mr-2" />
+                      Trigger Now
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Models List */}
         <div className="lg:col-span-2">
@@ -318,19 +379,17 @@ export default function BotsPage() {
               ) : (
                 <div className="divide-y divide-border">
                   {models.map((model) => (
-                    <div 
-                      key={model.id} 
-                      className={`py-4 px-2 rounded-lg cursor-pointer transition-colors ${
-                        selectedModel?.id === model.id ? "bg-accent" : "hover:bg-accent/50"
-                      }`}
+                    <div
+                      key={model.id}
+                      className={`py-4 px-2 rounded-lg cursor-pointer transition-colors ${selectedModel?.id === model.id ? "bg-accent" : "hover:bg-accent/50"
+                        }`}
                       onClick={() => handleSelectModel(model)}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                           <div
-                            className={`w-3 h-3 rounded-full ${
-                              model.is_active ? "bg-green-500" : "bg-muted"
-                            }`}
+                            className={`w-3 h-3 rounded-full ${model.is_active ? "bg-green-500" : "bg-muted"
+                              }`}
                           />
                           <div>
                             <h3 className="font-medium">{model.name}</h3>
@@ -435,7 +494,7 @@ export default function BotsPage() {
                     )}
                   </div>
 
-                  <Button 
+                  <Button
                     onClick={handleGetPrediction}
                     disabled={getPredictionMutation.isPending}
                     className="w-full"
@@ -452,7 +511,7 @@ export default function BotsPage() {
           </Card>
 
           {currentPrediction && (
-            <PredictionCard 
+            <PredictionCard
               prediction={currentPrediction}
               onExecute={handleExecuteTrade}
               isExecuting={executePredictionMutation.isPending}
