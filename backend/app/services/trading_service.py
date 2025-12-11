@@ -20,10 +20,16 @@ def _calc_profit(order_type: str, open_price: float, close_price: float, lot_siz
 
 
 def open_order(db: Session, user_id: str, *, symbol: str, order_type: str, lot_size: float, price: float, stop_loss=None, take_profit=None, connection_id=None) -> Trade:
+    import uuid
     order_type = order_type.upper()
+    
+    # Convert user_id to UUID if string
+    user_uuid = uuid.UUID(str(user_id)) if not isinstance(user_id, uuid.UUID) else user_id
+    conn_uuid = uuid.UUID(str(connection_id)) if connection_id else None
+    
     trade = Trade(
-        user_id=user_id,
-        connection_id=connection_id,
+        user_id=user_uuid,
+        connection_id=conn_uuid,
         symbol=symbol,
         trade_type=order_type,
         lot_size=Decimal(str(lot_size)),
@@ -34,8 +40,8 @@ def open_order(db: Session, user_id: str, *, symbol: str, order_type: str, lot_s
         source="api",
     )
     position = Position(
-        user_id=user_id,
-        connection_id=connection_id,
+        user_id=user_uuid,
+        connection_id=conn_uuid,
         symbol=symbol,
         trade_type=order_type,
         lot_size=Decimal(str(lot_size)),
