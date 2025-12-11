@@ -30,17 +30,22 @@ function MetricCard({ label, value, color }: { label: string; value: string; col
 }
 
 function BacktestResultDisplay({ result, trades }: { result: BacktestResult; trades: BacktestTrade[] }) {
+  const totalTrades = result.total_trades ?? 0;
+  const winRate = result.win_rate ?? 0;
+  // Calculate winning trades from win_rate if not available (for legacy data)
+  const winningTrades = result.winning_trades ?? Math.round((winRate / 100) * totalTrades);
+  
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard
           label="Total Trades"
-          value={result.total_trades?.toString() || '0'}
+          value={totalTrades.toString()}
         />
         <MetricCard
           label="Win Rate"
-          value={`${(result.win_rate ?? 0).toFixed(1)}%`}
-          color={(result.win_rate ?? 0) >= 50 ? "text-green-500" : "text-red-500"}
+          value={`${winRate.toFixed(1)}%`}
+          color={winRate >= 50 ? "text-green-500" : "text-red-500"}
         />
         <MetricCard
           label="Net Profit"
@@ -66,7 +71,7 @@ function BacktestResultDisplay({ result, trades }: { result: BacktestResult; tra
         />
         <MetricCard
           label="Winning Trades"
-          value={`${result.winning_trades ?? 0}/${result.total_trades ?? 0}`}
+          value={`${winningTrades}/${totalTrades}`}
         />
       </div>
 
