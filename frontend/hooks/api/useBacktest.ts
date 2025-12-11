@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/api-client';
-import type { BacktestConfig, BacktestResult } from '@/types';
+import type { BacktestConfig, BacktestResult, BacktestSession } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
 // Fetch backtest strategies (preset strategies for backtesting)
@@ -14,9 +14,9 @@ export function useBacktestStrategies() {
   });
 }
 
-// Fetch backtest sessions
+// Fetch backtest sessions (history)
 export function useBacktestSessions() {
-  return useQuery({
+  return useQuery<BacktestSession[]>({
     queryKey: ['backtest-sessions'],
     queryFn: async () => {
       const response = await apiClient.get('/api/v1/backtest/sessions');

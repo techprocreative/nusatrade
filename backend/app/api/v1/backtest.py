@@ -53,17 +53,32 @@ class BacktestRunRequest(BaseModel):
     initial_balance: float = 10000.0
     commission: float = 0.0
     slippage: float = 0.0001
+    lot_size: float = 0.1
+
+
+class BacktestTradeResponse(BaseModel):
+    symbol: str
+    order_type: str
+    entry_price: float
+    exit_price: float
+    profit: float
 
 
 class BacktestResultResponse(BaseModel):
     session_id: str
     status: str
-    net_profit: Optional[float]
-    total_trades: Optional[int]
-    win_rate: Optional[float]
-    profit_factor: Optional[float]
-    max_drawdown_pct: Optional[float]
-    sharpe_ratio: Optional[float]
+    net_profit: Optional[float] = None
+    total_trades: Optional[int] = None
+    winning_trades: Optional[int] = None
+    losing_trades: Optional[int] = None
+    win_rate: Optional[float] = None
+    profit_factor: Optional[float] = None
+    max_drawdown_pct: Optional[float] = None
+    sharpe_ratio: Optional[float] = None
+    avg_win: Optional[float] = None
+    avg_loss: Optional[float] = None
+    trades: Optional[List[BacktestTradeResponse]] = None
+    equity_curve: Optional[List[float]] = None
     created_at: datetime
 
 
@@ -356,15 +371,33 @@ def run_backtest(
         session.status = "completed"
         db.commit()
 
+        # Prepare trades for response
+        trades_response = [
+            BacktestTradeResponse(
+                symbol=t.get("symbol", request.symbol) if isinstance(t, dict) else t.symbol,
+                order_type=t.get("order_type", "BUY") if isinstance(t, dict) else t.order_type.value,
+                entry_price=float(t.get("entry_price", 0)) if isinstance(t, dict) else float(t.entry_price),
+                exit_price=float(t.get("exit_price", 0)) if isinstance(t, dict) else float(t.exit_price),
+                profit=float(t.get("profit", 0)) if isinstance(t, dict) else float(t.profit),
+            )
+            for t in result_data["trades"][:50]
+        ]
+
         return BacktestResultResponse(
             session_id=str(session.id),
             status="completed",
             net_profit=metrics.net_profit,
             total_trades=metrics.total_trades,
+            winning_trades=metrics.winning_trades,
+            losing_trades=metrics.losing_trades,
             win_rate=metrics.win_rate,
             profit_factor=metrics.profit_factor,
             max_drawdown_pct=metrics.max_drawdown_pct,
             sharpe_ratio=metrics.sharpe_ratio,
+            avg_win=metrics.avg_win,
+            avg_loss=metrics.avg_loss,
+            trades=trades_response,
+            equity_curve=result_data["equity_curve"][-100:] if len(result_data["equity_curve"]) > 100 else result_data["equity_curve"],
             created_at=session.created_at,
         )
 
@@ -399,10 +432,14 @@ def list_sessions(
                 status=s.status or "unknown",
                 net_profit=float(bt_result.net_profit) if bt_result.net_profit else None,
                 total_trades=bt_result.total_trades,
+                winning_trades=bt_result.winning_trades,
+                losing_trades=bt_result.losing_trades,
                 win_rate=float(bt_result.win_rate) if bt_result.win_rate else None,
                 profit_factor=float(bt_result.profit_factor) if bt_result.profit_factor else None,
                 max_drawdown_pct=float(bt_result.max_drawdown_pct) if bt_result.max_drawdown_pct else None,
                 sharpe_ratio=float(bt_result.sharpe_ratio) if bt_result.sharpe_ratio else None,
+                avg_win=float(bt_result.avg_win) if bt_result.avg_win else None,
+                avg_loss=float(bt_result.avg_loss) if bt_result.avg_loss else None,
                 created_at=bt_result.created_at or datetime.utcnow(),
             )
 
@@ -449,10 +486,25 @@ def get_session(
             status=session.status or "unknown",
             net_profit=float(bt_result.net_profit) if bt_result.net_profit else None,
             total_trades=bt_result.total_trades,
+            winning_trades=bt_result.winning_trades,
+            losing_trades=bt_result.losing_trades,
             win_rate=float(bt_result.win_rate) if bt_result.win_rate else None,
             profit_factor=float(bt_result.profit_factor) if bt_result.profit_factor else None,
             max_drawdown_pct=float(bt_result.max_drawdown_pct) if bt_result.max_drawdown_pct else None,
             sharpe_ratio=float(bt_result.sharpe_ratio) if bt_result.sharpe_ratio else None,
+            avg_win=float(bt_result.avg_win) if bt_result.avg_win else None,
+            avg_loss=float(bt_result.avg_loss) if bt_result.avg_loss else None,
+            trades=[
+                BacktestTradeResponse(
+                    symbol=t.get("symbol", session.symbol or "UNKNOWN"),
+                    order_type=t.get("order_type", "BUY"),
+                    entry_price=float(t.get("entry_price", 0)),
+                    exit_price=float(t.get("exit_price", 0)),
+                    profit=float(t.get("profit", 0)),
+                )
+                for t in (bt_result.trades or [])[:50]
+            ],
+            equity_curve=bt_result.equity_curve[-100:] if bt_result.equity_curve and len(bt_result.equity_curve) > 100 else bt_result.equity_curve,
             created_at=bt_result.created_at or datetime.utcnow(),
         )
 

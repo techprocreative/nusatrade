@@ -128,21 +128,46 @@ export interface BacktestConfig {
   initial_balance?: number;
   commission?: number;
   slippage?: number;
+  lot_size?: number;
+}
+
+export interface BacktestTrade {
+  symbol: string;
+  order_type: string;
+  entry_price: number;
+  exit_price: number;
+  profit: number;
 }
 
 export interface BacktestResult {
   session_id: string;
   status: string;
-  metrics: {
-    net_profit: number;
-    total_trades: number;
-    winning_trades: number;
-    win_rate: number;
-    profit_factor: number;
-    max_drawdown_pct: number;
-    sharpe_ratio: number;
-  };
-  trades: Trade[];
+  net_profit?: number;
+  total_trades?: number;
+  winning_trades?: number;
+  losing_trades?: number;
+  win_rate?: number;
+  profit_factor?: number;
+  max_drawdown_pct?: number;
+  sharpe_ratio?: number;
+  avg_win?: number;
+  avg_loss?: number;
+  trades?: BacktestTrade[];
+  equity_curve?: number[];
+  created_at?: string;
+}
+
+export interface BacktestSession {
+  id: string;
+  strategy_id: string;
+  symbol: string;
+  timeframe: string;
+  start_date: string;
+  end_date: string;
+  initial_balance: number;
+  status: string;
+  created_at: string;
+  result?: BacktestResult;
 }
 
 // Broker Connection types
