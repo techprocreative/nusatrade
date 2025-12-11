@@ -212,43 +212,43 @@ export default function BacktestPage() {
       </Card>
 
       {/* Results */}
-      {result && (
+      {result && result.metrics && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <MetricCard
               label="Total Trades"
-              value={result.metrics.total_trades.toString()}
+              value={result.metrics.total_trades?.toString() || '0'}
             />
             <MetricCard
               label="Win Rate"
-              value={`${result.metrics.win_rate.toFixed(1)}%`}
-              color={result.metrics.win_rate >= 50 ? "text-green-500" : "text-red-500"}
+              value={`${(result.metrics.win_rate ?? 0).toFixed(1)}%`}
+              color={(result.metrics.win_rate ?? 0) >= 50 ? "text-green-500" : "text-red-500"}
             />
             <MetricCard
               label="Net Profit"
-              value={`$${result.metrics.net_profit.toFixed(2)}`}
-              color={result.metrics.net_profit >= 0 ? "text-green-500" : "text-red-500"}
+              value={`$${(result.metrics.net_profit ?? 0).toFixed(2)}`}
+              color={(result.metrics.net_profit ?? 0) >= 0 ? "text-green-500" : "text-red-500"}
             />
             <MetricCard
               label="Profit Factor"
-              value={result.metrics.profit_factor.toFixed(2)}
-              color={result.metrics.profit_factor >= 1 ? "text-green-500" : "text-red-500"}
+              value={(result.metrics.profit_factor ?? 0).toFixed(2)}
+              color={(result.metrics.profit_factor ?? 0) >= 1 ? "text-green-500" : "text-red-500"}
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <MetricCard
               label="Max Drawdown"
-              value={`${result.metrics.max_drawdown_pct.toFixed(1)}%`}
+              value={`${(result.metrics.max_drawdown_pct ?? 0).toFixed(1)}%`}
               color="text-red-500"
             />
             <MetricCard
               label="Sharpe Ratio"
-              value={result.metrics.sharpe_ratio.toFixed(2)}
+              value={(result.metrics.sharpe_ratio ?? 0).toFixed(2)}
             />
             <MetricCard
               label="Winning Trades"
-              value={`${result.metrics.winning_trades}/${result.metrics.total_trades}`}
+              value={`${result.metrics.winning_trades ?? 0}/${result.metrics.total_trades ?? 0}`}
             />
           </div>
 
@@ -288,9 +288,8 @@ export default function BacktestPage() {
                             {trade.exit_price.toFixed(5)}
                           </td>
                           <td
-                            className={`text-right font-semibold ${
-                              trade.profit >= 0 ? "text-green-500" : "text-red-500"
-                            }`}
+                            className={`text-right font-semibold ${trade.profit >= 0 ? "text-green-500" : "text-red-500"
+                              }`}
                           >
                             ${trade.profit.toFixed(2)}
                           </td>
