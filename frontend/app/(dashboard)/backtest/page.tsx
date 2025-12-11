@@ -41,7 +41,12 @@ export default function BacktestPage() {
   const { data: presetStrategies = [] } = useBacktestStrategies();
   const { data: userStrategies = [] } = useStrategies();
   const runBacktestMutation = useRunBacktest();
-  const { data: result, isLoading: loadingResult } = useBacktestResult(sessionId);
+  const { data: sessionData, isLoading: loadingResult } = useBacktestResult(sessionId);
+
+  // Extract metrics from session result - backend returns SessionResponse with nested result
+  const sessionAny = sessionData as any;
+  const metrics = sessionAny?.result || sessionAny;
+  const trades = sessionAny?.trades || sessionAny?.result?.trades || [];
 
   // Combine preset and user strategies
   const allStrategies = [
@@ -212,53 +217,53 @@ export default function BacktestPage() {
       </Card>
 
       {/* Results */}
-      {result && result.metrics && (
+      {metrics && (metrics.total_trades || metrics.net_profit !== undefined) && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <MetricCard
               label="Total Trades"
-              value={result.metrics.total_trades?.toString() || '0'}
+              value={metrics.total_trades?.toString() || '0'}
             />
             <MetricCard
               label="Win Rate"
-              value={`${(result.metrics.win_rate ?? 0).toFixed(1)}%`}
-              color={(result.metrics.win_rate ?? 0) >= 50 ? "text-green-500" : "text-red-500"}
+              value={`${(metrics.win_rate ?? 0).toFixed(1)}%`}
+              color={(metrics.win_rate ?? 0) >= 50 ? "text-green-500" : "text-red-500"}
             />
             <MetricCard
               label="Net Profit"
-              value={`$${(result.metrics.net_profit ?? 0).toFixed(2)}`}
-              color={(result.metrics.net_profit ?? 0) >= 0 ? "text-green-500" : "text-red-500"}
+              value={`$${(metrics.net_profit ?? 0).toFixed(2)}`}
+              color={(metrics.net_profit ?? 0) >= 0 ? "text-green-500" : "text-red-500"}
             />
             <MetricCard
               label="Profit Factor"
-              value={(result.metrics.profit_factor ?? 0).toFixed(2)}
-              color={(result.metrics.profit_factor ?? 0) >= 1 ? "text-green-500" : "text-red-500"}
+              value={(metrics.profit_factor ?? 0).toFixed(2)}
+              color={(metrics.profit_factor ?? 0) >= 1 ? "text-green-500" : "text-red-500"}
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <MetricCard
               label="Max Drawdown"
-              value={`${(result.metrics.max_drawdown_pct ?? 0).toFixed(1)}%`}
+              value={`${(metrics.max_drawdown_pct ?? 0).toFixed(1)}%`}
               color="text-red-500"
             />
             <MetricCard
               label="Sharpe Ratio"
-              value={(result.metrics.sharpe_ratio ?? 0).toFixed(2)}
+              value={(metrics.sharpe_ratio ?? 0).toFixed(2)}
             />
             <MetricCard
               label="Winning Trades"
-              value={`${result.metrics.winning_trades ?? 0}/${result.metrics.total_trades ?? 0}`}
+              value={`${metrics.winning_trades ?? 0}/${metrics.total_trades ?? 0}`}
             />
           </div>
 
           {/* Trades Table */}
           <Card>
             <CardHeader>
-              <CardTitle>Trades ({result.trades?.length || 0})</CardTitle>
+              <CardTitle>Trades ({trades?.length || 0})</CardTitle>
             </CardHeader>
             <CardContent>
-              {result.trades && result.trades.length > 0 ? (
+              {trades && trades.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -271,8 +276,8 @@ export default function BacktestPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {result.trades.slice(0, 20).map((trade: any) => (
-                        <tr key={trade.id} className="border-b border-border/50">
+                      {trades.slice(0, 20).map((trade: any, index: number) => (
+                        <tr key={trade.id || index} className="border-b border-border/50">
                           <td className="py-3">{trade.symbol}</td>
                           <td
                             className={
@@ -282,16 +287,16 @@ export default function BacktestPage() {
                             {trade.order_type}
                           </td>
                           <td className="text-right text-muted-foreground">
-                            {trade.entry_price.toFixed(5)}
+                            {trade.entry_price?.toFixed(5) || '-'}
                           </td>
                           <td className="text-right text-muted-foreground">
-                            {trade.exit_price.toFixed(5)}
+                            {trade.exit_price?.toFixed(5) || '-'}
                           </td>
                           <td
-                            className={`text-right font-semibold ${trade.profit >= 0 ? "text-green-500" : "text-red-500"
+                            className={`text-right font-semibold ${(trade.profit ?? 0) >= 0 ? "text-green-500" : "text-red-500"
                               }`}
                           >
-                            ${trade.profit.toFixed(2)}
+                            ${(trade.profit ?? 0).toFixed(2)}
                           </td>
                         </tr>
                       ))}
