@@ -13,6 +13,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 from app.ml.features import FeatureEngineer
+from app.core.validators import sanitize_model_path
 
 
 class Trainer:
@@ -58,12 +59,13 @@ class Trainer:
 
     def train(
         self,
+        model_id: Optional[str] = None,  # Add model_id parameter for safe path
         data: pd.DataFrame = None,
         model_type: str = "random_forest",
         test_split: float = 0.2,
         config: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Train the ML model."""
+        """Train the ML model with safe file path handling."""
         config = config or {}
 
         # Use provided data or generate sample
@@ -144,16 +146,25 @@ class Trainer:
             sorted_importance = sorted(importance.items(), key=lambda x: x[1], reverse=True)
             metrics["top_features"] = dict(sorted_importance[:10])
 
-        # Save model
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        model_filename = f"model_{model_type}_{timestamp}.pkl"
-        model_path = os.path.join(self.model_dir, model_filename)
+        # Save model with safe path construction
+        if model_id:
+            # Use sanitize_model_path for safe path construction
+            model_path = sanitize_model_path(
+                model_id=model_id,
+                base_dir=self.model_dir,
+                extension=".pkl"
+            )
+        else:
+            # Fallback to timestamp-based filename for backward compatibility
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            model_filename = f"model_{model_type}_{timestamp}.pkl"
+            model_path = os.path.join(self.model_dir, model_filename)
 
-        self._save_model(model_path)
+        self._save_model(str(model_path))
 
         return {
             "success": True,
-            "model_path": model_path,
+            "model_path": str(model_path),
             "metrics": metrics,
             "model_type": model_type,
             "trained_at": datetime.utcnow().isoformat(),

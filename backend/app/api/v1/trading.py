@@ -6,9 +6,9 @@ from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.schemas.trading import (
-    OrderCreate, 
-    OrderClose, 
-    TradeOut, 
+    OrderCreate,
+    OrderClose,
+    TradeOut,
     PositionOut,
     PositionSizeRequest,
     PositionSizeResponse,
@@ -18,6 +18,13 @@ from app.schemas.trading import (
 from app.services import trading_service
 from app.config import get_settings
 from app.core.logging import get_logger
+from app.core.validators import (
+    validate_uuid,
+    validate_symbol,
+    validate_lot_size,
+    validate_price,
+    validate_sl_tp,
+)
 
 
 router = APIRouter()
@@ -41,16 +48,23 @@ def list_positions(db: Session = Depends(deps.get_db), current_user=Depends(deps
 
 @router.post("/orders", response_model=TradeOutWithMT5, status_code=status.HTTP_201_CREATED)
 async def create_order(order: OrderCreate, db: Session = Depends(deps.get_db), current_user=Depends(deps.get_current_user)):
+    # Validate symbol format
+    validated_symbol = validate_symbol(order.symbol)
+
     # Validate lot size
-    if order.lot_size <= 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="lot_size must be positive")
-    
-    if order.lot_size > settings.max_lot_size:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"lot_size cannot exceed {settings.max_lot_size}"
-        )
-    
+    validated_lot_size = validate_lot_size(order.lot_size, min_lot=0.01, max_lot=settings.max_lot_size)
+
+    # Validate price
+    validated_price = validate_price(order.price, validated_symbol)
+
+    # Validate SL/TP levels
+    validated_sl, validated_tp = validate_sl_tp(
+        stop_loss=order.stop_loss,
+        take_profit=order.take_profit,
+        entry_price=validated_price,
+        order_type=order.order_type,
+    )
+
     # Check max positions limit
     current_positions = trading_service.list_positions(db, current_user.id)
     if len(current_positions) >= settings.max_positions_per_user:
@@ -58,45 +72,60 @@ async def create_order(order: OrderCreate, db: Session = Depends(deps.get_db), c
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Maximum {settings.max_positions_per_user} open positions reached"
         )
-    
+
     # Calculate required margin (simplified calculation)
     # For accurate margin, need to query MT5 via connector
     leverage = 100  # Default, should come from broker connection
     contract_size = 100000  # Standard lot
-    estimated_margin = (order.price * order.lot_size * contract_size) / leverage
-    
-    logger.info(f"Opening order for user {current_user.id}: {order.symbol} {order.order_type} {order.lot_size} lots")
+    estimated_margin = (validated_price * validated_lot_size * contract_size) / leverage
+
+    logger.info(f"Opening order for user {current_user.id}: {validated_symbol} {order.order_type} {validated_lot_size} lots")
     logger.info(f"Estimated margin required: ${estimated_margin:.2f}")
-    
+
     # Check if connector is online (if connection_id provided)
     if order.connection_id:
         if not trading_service.is_connector_online(order.connection_id):
-            logger.warning(f"Connector {order.connection_id} is not online, order will be saved to database only")
-    
+            logger.warning(f"Connector {order.connection_id} is not online")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="MT5 connector is not online. Please ensure the connector is running."
+            )
+
     # Open the order and send to MT5
-    trade, mt5_result = await trading_service.open_order_with_mt5(
-        db,
-        current_user.id,
-        symbol=order.symbol,
-        order_type=order.order_type,
-        lot_size=order.lot_size,
-        price=order.price,
-        stop_loss=order.stop_loss,
-        take_profit=order.take_profit,
-        connection_id=order.connection_id,
-    )
-    
-    if mt5_result.get("success"):
-        logger.info(f"Order sent to MT5 successfully via connector {order.connection_id}")
-    else:
-        logger.warning(f"MT5 execution failed: {mt5_result.get('error', 'Unknown error')}")
-    
+    # Note: This will raise HTTPException if MT5 execution fails (with rollback)
+    try:
+        trade, mt5_result = await trading_service.open_order_with_mt5(
+            db,
+            current_user.id,
+            symbol=validated_symbol,  # Use validated symbol
+            order_type=order.order_type,
+            lot_size=validated_lot_size,  # Use validated lot size
+            price=validated_price,  # Use validated price
+            stop_loss=validated_sl,  # Use validated SL
+            take_profit=validated_tp,  # Use validated TP
+            connection_id=order.connection_id,
+        )
+    except HTTPException:
+        # Re-raise HTTP exceptions (from trading_service)
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error opening order: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred while opening the order"
+        )
+
+    logger.info(f"Order executed successfully on MT5 via connector {order.connection_id}")
+
     return TradeOutWithMT5(trade=TradeOut.model_validate(trade), mt5_execution=mt5_result)
 
 
 @router.put("/orders/{order_id}/close", response_model=TradeOutWithMT5)
 async def close_order(order_id: str, payload: OrderClose, db: Session = Depends(deps.get_db), current_user=Depends(deps.get_current_user)):
-    trade, mt5_result = await trading_service.close_order_with_mt5(db, current_user.id, order_id, payload.close_price)
+    # Validate UUID format
+    order_uuid = validate_uuid(order_id, "order_id")
+
+    trade, mt5_result = await trading_service.close_order_with_mt5(db, current_user.id, str(order_uuid), payload.close_price)
     if not trade:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
     

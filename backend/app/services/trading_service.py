@@ -20,13 +20,20 @@ def _calc_profit(order_type: str, open_price: float, close_price: float, lot_siz
 
 
 def open_order(db: Session, user_id: str, *, symbol: str, order_type: str, lot_size: float, price: float, stop_loss=None, take_profit=None, connection_id=None) -> Trade:
+    """
+    Create trade and position in database.
+
+    IMPORTANT: This function no longer commits the transaction.
+    The caller (open_order_with_mt5) is responsible for commit/rollback
+    based on MT5 execution result.
+    """
     import uuid
     order_type = order_type.upper()
-    
+
     # Convert user_id to UUID if string
     user_uuid = uuid.UUID(str(user_id)) if not isinstance(user_id, uuid.UUID) else user_id
     conn_uuid = uuid.UUID(str(connection_id)) if connection_id else None
-    
+
     trade = Trade(
         user_id=user_uuid,
         connection_id=conn_uuid,
@@ -51,9 +58,10 @@ def open_order(db: Session, user_id: str, *, symbol: str, order_type: str, lot_s
     )
     db.add(trade)
     db.add(position)
-    db.commit()
-    db.refresh(trade)
-    db.refresh(position)
+
+    # REMOVED: db.commit() - caller is responsible
+    # REMOVED: db.refresh() - will be refreshed after commit
+
     return trade
 
 
@@ -184,8 +192,18 @@ async def open_order_with_mt5(
     take_profit=None,
     connection_id=None,
 ) -> tuple[Trade, dict]:
-    """Open order in database and send to MT5 via connector."""
-    # First save to database
+    """
+    Open order in database and send to MT5 via connector.
+
+    IMPORTANT: This uses a two-phase commit approach:
+    1. Create trade and position in DB (not committed)
+    2. Send to MT5 for execution
+    3. If MT5 succeeds → commit to DB
+    4. If MT5 fails → rollback DB transaction
+
+    This prevents data inconsistency between DB and MT5.
+    """
+    # Create trade and position in database (NOT committed yet)
     trade = open_order(
         db, user_id,
         symbol=symbol,
@@ -196,19 +214,64 @@ async def open_order_with_mt5(
         take_profit=take_profit,
         connection_id=connection_id,
     )
-    
-    # Then send to MT5 via WebSocket
-    mt5_result = await send_open_order_to_mt5(
-        trade=trade,
-        connection_id=connection_id,
-        symbol=symbol,
-        order_type=order_type,
-        lot_size=lot_size,
-        stop_loss=stop_loss,
-        take_profit=take_profit,
-    )
-    
-    return trade, mt5_result
+
+    # Flush to get the ID, but don't commit
+    db.flush()
+
+    try:
+        # Send to MT5 via WebSocket for execution
+        mt5_result = await send_open_order_to_mt5(
+            trade=trade,
+            connection_id=connection_id,
+            symbol=symbol,
+            order_type=order_type,
+            lot_size=lot_size,
+            stop_loss=stop_loss,
+            take_profit=take_profit,
+        )
+
+        # Check MT5 execution result
+        if mt5_result.get("success"):
+            # MT5 execution successful - commit to database
+            db.commit()
+            logger.info(f"Trade {trade.id} committed to DB after successful MT5 execution")
+
+            return trade, mt5_result
+        else:
+            # MT5 execution failed - rollback database transaction
+            error_msg = mt5_result.get("error", "Unknown error")
+            logger.error(f"Trade {trade.id} ROLLED BACK - MT5 execution failed: {error_msg}")
+
+            db.rollback()
+
+            # Send error notification to user's frontend
+            try:
+                await connection_manager.broadcast_to_user(user_id, {
+                    "type": "TRADE_ERROR",
+                    "trade_id": str(trade.id),
+                    "symbol": symbol,
+                    "order_type": order_type,
+                    "error": error_msg,
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                })
+            except Exception as e:
+                logger.error(f"Failed to broadcast trade error: {e}")
+
+            # Raise exception to indicate failure
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=503,
+                detail=f"Failed to execute trade on MT5: {error_msg}"
+            )
+
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        # Unexpected error - rollback and raise
+        logger.error(f"Unexpected error in open_order_with_mt5: {e}")
+        db.rollback()
+        raise
 
 
 async def close_order_with_mt5(

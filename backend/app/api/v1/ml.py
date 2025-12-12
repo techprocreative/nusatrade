@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,7 @@ from app.models.ml import MLModel, MLPrediction
 from app.models.strategy import Strategy
 from app.ml.features import FeatureEngineer
 from app.ml.training import Trainer
+from app.core.validators import validate_uuid, validate_symbol, validate_date_range
 
 
 router = APIRouter()
@@ -117,7 +118,7 @@ def list_models(
     return result
 
 
-@router.post("/models", response_model=ModelResponse)
+@router.post("/models", response_model=ModelResponse, status_code=status.HTTP_201_CREATED)
 def create_model(
     request: ModelCreateRequest,
     db: Session = Depends(deps.get_db),
@@ -177,8 +178,11 @@ def get_model(
     current_user=Depends(deps.get_current_user),
 ):
     """Get a specific ML model."""
+    # Validate UUID format to prevent injection
+    model_uuid = validate_uuid(model_id, "model_id")
+
     model = db.query(MLModel).filter(
-        MLModel.id == model_id,
+        MLModel.id == model_uuid,
         MLModel.user_id == current_user.id,
     ).first()
 
@@ -216,8 +220,14 @@ def update_model(
     current_user=Depends(deps.get_current_user),
 ):
     """Update an ML model configuration."""
+    # Validate UUID format
+    model_uuid = validate_uuid(model_id, "model_id")
+
+    # Validate symbol format
+    validated_symbol = validate_symbol(request.symbol)
+
     model = db.query(MLModel).filter(
-        MLModel.id == model_id,
+        MLModel.id == model_uuid,
         MLModel.user_id == current_user.id,
     ).first()
 
@@ -238,7 +248,7 @@ def update_model(
 
     model.name = request.name
     model.model_type = request.model_type
-    model.symbol = request.symbol
+    model.symbol = validated_symbol  # Use validated symbol
     model.timeframe = request.timeframe
     model.strategy_id = strategy.id if strategy else None
     model.config = request.config or {}
@@ -270,8 +280,11 @@ def delete_model(
     current_user=Depends(deps.get_current_user),
 ):
     """Delete an ML model."""
+    # Validate UUID format
+    model_uuid = validate_uuid(model_id, "model_id")
+
     model = db.query(MLModel).filter(
-        MLModel.id == model_id,
+        MLModel.id == model_uuid,
         MLModel.user_id == current_user.id,
     ).first()
 
@@ -279,11 +292,11 @@ def delete_model(
         raise HTTPException(status_code=404, detail="Model not found")
 
     # Delete predictions first
-    db.query(MLPrediction).filter(MLPrediction.model_id == model_id).delete()
+    db.query(MLPrediction).filter(MLPrediction.model_id == model_uuid).delete()
     db.delete(model)
     db.commit()
 
-    return {"deleted": model_id}
+    return {"deleted": str(model_uuid)}
 
 
 def _train_model_task(model_id: str, config: dict, db_url: str):
@@ -321,8 +334,17 @@ def train_model(
     current_user=Depends(deps.get_current_user),
 ):
     """Train an ML model synchronously."""
+    # Validate UUID format to prevent path traversal via model_id
+    model_uuid = validate_uuid(model_id, "model_id")
+
+    # Validate date range if provided
+    if request.start_date and request.end_date:
+        request.start_date, request.end_date = validate_date_range(
+            request.start_date, request.end_date
+        )
+
     model = db.query(MLModel).filter(
-        MLModel.id == model_id,
+        MLModel.id == model_uuid,
         MLModel.user_id == current_user.id,
     ).first()
 
@@ -341,9 +363,10 @@ def train_model(
     db.commit()
 
     try:
-        # Train the model
+        # Train the model with safe model_id
         trainer = Trainer()
         result = trainer.train(
+            model_id=str(model_uuid),  # Pass validated UUID for safe path construction
             model_type=model.model_type or "random_forest",
             test_split=request.test_split,
             config={
@@ -353,7 +376,7 @@ def train_model(
         )
 
         if result.get("success"):
-            # Update model with results
+            # Update model with results (path is already sanitized by Trainer)
             model.file_path = result.get("model_path")
             model.performance_metrics = result.get("metrics", {})
             model.training_status = "completed"
@@ -365,7 +388,7 @@ def train_model(
         db.commit()
 
         return {
-            "id": model_id,
+            "id": str(model_uuid),
             "status": model.training_status,
             "message": "Training completed" if model.training_status == "completed" else model.training_error,
             "metrics": model.performance_metrics,
@@ -386,8 +409,11 @@ def get_training_status(
     current_user=Depends(deps.get_current_user),
 ):
     """Get training status of a model."""
+    # Validate UUID format
+    model_uuid = validate_uuid(model_id, "model_id")
+
     model = db.query(MLModel).filter(
-        MLModel.id == model_id,
+        MLModel.id == model_uuid,
         MLModel.user_id == current_user.id,
     ).first()
 
@@ -395,7 +421,7 @@ def get_training_status(
         raise HTTPException(status_code=404, detail="Model not found")
 
     return {
-        "id": model_id,
+        "id": str(model_uuid),
         "training_status": model.training_status or "idle",
         "training_error": model.training_error,
         "training_started_at": model.training_started_at.isoformat() if model.training_started_at else None,
@@ -413,8 +439,11 @@ def get_model_predictions(
     limit: int = 50,
 ):
     """Get recent predictions from a model."""
+    # Validate UUID format
+    model_uuid = validate_uuid(model_id, "model_id")
+
     model = db.query(MLModel).filter(
-        MLModel.id == model_id,
+        MLModel.id == model_uuid,
         MLModel.user_id == current_user.id,
     ).first()
 
@@ -422,7 +451,7 @@ def get_model_predictions(
         raise HTTPException(status_code=404, detail="Model not found")
 
     predictions = db.query(MLPrediction).filter(
-        MLPrediction.model_id == model_id
+        MLPrediction.model_id == model_uuid
     ).order_by(MLPrediction.created_at.desc()).limit(limit).all()
 
     return [
@@ -448,7 +477,7 @@ def make_prediction(
 ):
     """
     Generate a prediction using trained ML model with strategy validation.
-    
+
     This endpoint:
     1. Loads the trained ML model
     2. Fetches real market data
@@ -458,11 +487,15 @@ def make_prediction(
     """
     from app.services.prediction_service import PredictionService
     from app.core.logging import get_logger
-    
+
     logger = get_logger(__name__)
-    
+
+    # Validate UUID format and symbol
+    model_uuid = validate_uuid(model_id, "model_id")
+    validated_symbol = validate_symbol(request.symbol)
+
     model = db.query(MLModel).filter(
-        MLModel.id == model_id,
+        MLModel.id == model_uuid,
         MLModel.user_id == current_user.id,
     ).first()
 
@@ -481,7 +514,7 @@ def make_prediction(
         prediction_service = PredictionService(db)
         result = prediction_service.generate_prediction(
             model=model,
-            symbol=request.symbol,
+            symbol=validated_symbol,  # Use validated symbol
             use_strategy_rules=True,
             save_to_db=True,
         )
@@ -520,7 +553,7 @@ def make_prediction(
         return PredictionResponse(
             id=prediction_id,
             model_id=str(model.id),
-            symbol=request.symbol,
+            symbol=validated_symbol,
             prediction=prediction_data,
             confidence=result.confidence,
             strategy_rules=result.strategy_rules,
@@ -539,8 +572,11 @@ def activate_model(
     current_user=Depends(deps.get_current_user),
 ):
     """Activate a model for live trading signals."""
+    # Validate UUID format
+    model_uuid = validate_uuid(model_id, "model_id")
+
     model = db.query(MLModel).filter(
-        MLModel.id == model_id,
+        MLModel.id == model_uuid,
         MLModel.user_id == current_user.id,
     ).first()
 
@@ -562,7 +598,7 @@ def activate_model(
     model.is_active = True
     db.commit()
 
-    return {"id": model_id, "status": "active", "message": "Model activated for live trading"}
+    return {"id": str(model_uuid), "status": "active", "message": "Model activated for live trading"}
 
 
 @router.post("/models/{model_id}/deactivate")
@@ -572,8 +608,11 @@ def deactivate_model(
     current_user=Depends(deps.get_current_user),
 ):
     """Deactivate a model from live trading."""
+    # Validate UUID format
+    model_uuid = validate_uuid(model_id, "model_id")
+
     model = db.query(MLModel).filter(
-        MLModel.id == model_id,
+        MLModel.id == model_uuid,
         MLModel.user_id == current_user.id,
     ).first()
 
@@ -583,7 +622,7 @@ def deactivate_model(
     model.is_active = False
     db.commit()
 
-    return {"id": model_id, "status": "inactive"}
+    return {"id": str(model_uuid), "status": "inactive"}
 
 
 @router.post("/models/{model_id}/execute")
@@ -596,10 +635,21 @@ async def execute_prediction(
     """Execute a trade based on ML prediction."""
     from app.services import trading_service
     from app.models.broker import BrokerConnection
-    
+    from app.core.validators import validate_lot_size
+    from app.core.logging import get_logger
+
+    logger = get_logger(__name__)
+
+    # Validate UUID formats
+    model_uuid = validate_uuid(model_id, "model_id")
+    prediction_uuid = validate_uuid(request.prediction_id, "prediction_id")
+
+    # Validate lot size
+    validated_lot_size = validate_lot_size(request.lot_size)
+
     # Verify model ownership
     model = db.query(MLModel).filter(
-        MLModel.id == model_id,
+        MLModel.id == model_uuid,
         MLModel.user_id == current_user.id,
     ).first()
 
@@ -608,8 +658,8 @@ async def execute_prediction(
 
     # Get the prediction
     prediction = db.query(MLPrediction).filter(
-        MLPrediction.id == request.prediction_id,
-        MLPrediction.model_id == model_id,
+        MLPrediction.id == prediction_uuid,
+        MLPrediction.model_id == model_uuid,
     ).first()
 
     if not prediction:
@@ -640,7 +690,7 @@ async def execute_prediction(
             current_user.id,
             symbol=prediction.symbol,
             order_type=direction,
-            lot_size=request.lot_size,
+            lot_size=validated_lot_size,  # Use validated lot size
             price=pred_data.get("entry_price", 0),
             stop_loss=pred_data.get("stop_loss"),
             take_profit=pred_data.get("take_profit"),
@@ -650,12 +700,12 @@ async def execute_prediction(
         return {
             "success": True,
             "trade_id": str(trade.id),
-            "prediction_id": request.prediction_id,
+            "prediction_id": str(prediction_uuid),
             "direction": direction,
             "entry_price": pred_data.get("entry_price"),
             "stop_loss": pred_data.get("stop_loss"),
             "take_profit": pred_data.get("take_profit"),
-            "lot_size": request.lot_size,
+            "lot_size": validated_lot_size,
             "mt5_execution": mt5_result,
             "connection_id": connection_id,
         }
