@@ -328,3 +328,57 @@ def get_risk_profiles(current_user=Depends(deps.get_current_user)):
         }
     
     return {"profiles": profiles}
+
+
+@router.get("/position-monitor/status")
+def get_position_monitor_status(current_user=Depends(deps.get_current_user)):
+    """
+    Get position monitor service status.
+    
+    Returns:
+    - is_running: Whether the monitor is active
+    - last_sync: Last position sync time
+    - managed_connections: Number of connections being monitored
+    - total_positions: Total positions with trailing stop management
+    """
+    from app.services.position_monitor import position_monitor
+    return position_monitor.get_status()
+
+
+@router.post("/position-monitor/sync")
+async def trigger_position_sync(
+    db: Session = Depends(deps.get_db),
+    current_user=Depends(deps.get_current_user),
+):
+    """
+    Manually trigger position sync from MT5.
+    
+    Requests position updates from all connected MT5 terminals.
+    """
+    from app.api.websocket.connection_manager import connection_manager
+    from app.models.broker import BrokerConnection
+    
+    # Get user's active connections
+    connections = db.query(BrokerConnection).filter(
+        BrokerConnection.user_id == current_user.id,
+        BrokerConnection.is_active == True,
+    ).all()
+    
+    synced = []
+    for conn in connections:
+        conn_id = str(conn.id)
+        if connection_manager.is_connector_online(conn_id):
+            try:
+                await connection_manager.send_to_connector(conn_id, {
+                    "type": "GET_POSITIONS",
+                    "request_id": f"manual_sync_{conn_id}",
+                })
+                synced.append(conn_id)
+            except Exception as e:
+                logger.warning(f"Failed to sync positions from {conn_id}: {e}")
+    
+    return {
+        "status": "sync_requested",
+        "connections_synced": len(synced),
+        "connection_ids": synced,
+    }

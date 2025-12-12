@@ -242,6 +242,9 @@ class ConnectionManager:
             })
 
         elif msg_type == "POSITION_UPDATE":
+            # Update position monitor with new positions
+            await self._handle_position_update(session, connection_id, message)
+            
             await self.broadcast_to_user(session.user_id, {
                 "type": "POSITION_UPDATE",
                 "connection_id": connection_id,
@@ -315,6 +318,33 @@ class ConnectionManager:
         except Exception as e:
             logger.error(f"Error handling TRADE_RESULT: {e}")
             db.rollback()
+        finally:
+            db.close()
+
+    async def _handle_position_update(
+        self, session: ConnectorSession, connection_id: str, message: Dict[str, Any]
+    ):
+        """
+        Handle POSITION_UPDATE from connector.
+        
+        This syncs positions with:
+        - Position monitor (for trailing stop management)
+        - Database (to keep positions in sync)
+        """
+        from app.services.position_monitor import position_monitor
+        from app.core.database import SessionLocal
+        
+        positions = message.get("positions", [])
+        
+        # Update position monitor
+        position_monitor.handle_position_update(connection_id, positions)
+        
+        # Sync to database
+        db = SessionLocal()
+        try:
+            position_monitor.sync_positions_to_db(db, connection_id, session.user_id)
+        except Exception as e:
+            logger.error(f"Error syncing positions to DB: {e}")
         finally:
             db.close()
 

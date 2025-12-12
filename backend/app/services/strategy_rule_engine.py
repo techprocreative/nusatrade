@@ -66,8 +66,8 @@ class StrategyRuleEngine:
     # Map indicator names to DataFrame columns
     INDICATOR_COLUMN_MAP = {
         'rsi': lambda period=14: f'rsi_{period}',
-        'ema': lambda period: f'ema_{period}',
-        'sma': lambda period: f'sma_{period}',
+        'ema': lambda period=20: f'ema_{period}',
+        'sma': lambda period=20: f'sma_{period}',
         'macd': lambda: 'macd',
         'macd_signal': lambda: 'macd_signal',
         'macd_hist': lambda: 'macd_hist',
