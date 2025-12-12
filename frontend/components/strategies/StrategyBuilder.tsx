@@ -32,7 +32,7 @@ const RISK_PROFILES = [
 
 const INDICATORS = [
   "RSI", "MACD", "EMA", "SMA", "Bollinger Bands",
-  "Stochastic", "ATR", "ADX", "Ichimoku", "Fibonacci",
+  "Stochastic", "ATR", "ADX", "CCI", "Ichimoku", "Fibonacci",
 ];
 
 interface StrategyBuilderProps {

@@ -25,6 +25,7 @@ class FeatureEngineer:
         df = self._add_rsi(df)
         df = self._add_stochastic(df)
         df = self._add_momentum(df)
+        df = self._add_cci(df)
 
         # Volatility Indicators
         df = self._add_bollinger_bands(df)
@@ -181,6 +182,40 @@ class FeatureEngineer:
         df["roc_10"] = (df["close"] - df["close"].shift(10)) / df["close"].shift(10) * 100
         df["roc_20"] = (df["close"] - df["close"].shift(20)) / df["close"].shift(20) * 100
 
+        return df
+
+    def _add_cci(self, df: pd.DataFrame, period: int = 20) -> pd.DataFrame:
+        """
+        Add Commodity Channel Index (CCI).
+        
+        CCI = (Typical Price - SMA of TP) / (0.015 * Mean Deviation)
+        Typical Price = (High + Low + Close) / 3
+        
+        Interpretation:
+        - CCI > 100: Overbought (potential sell signal)
+        - CCI < -100: Oversold (potential buy signal)
+        - CCI crossing above 0: Bullish momentum
+        - CCI crossing below 0: Bearish momentum
+        """
+        # Calculate Typical Price
+        tp = (df["high"] + df["low"] + df["close"]) / 3
+        
+        # Calculate SMA of Typical Price
+        sma_tp = tp.rolling(window=period).mean()
+        
+        # Calculate Mean Deviation
+        mean_deviation = tp.rolling(window=period).apply(
+            lambda x: np.abs(x - x.mean()).mean(), raw=True
+        )
+        
+        # Calculate CCI
+        df["cci"] = (tp - sma_tp) / (0.015 * mean_deviation)
+        df[f"cci_{period}"] = df["cci"]
+        
+        # CCI zones for quick reference
+        df["cci_overbought"] = (df["cci"] > 100).astype(int)
+        df["cci_oversold"] = (df["cci"] < -100).astype(int)
+        
         return df
 
     def _add_volume_features(self, df: pd.DataFrame) -> pd.DataFrame:

@@ -133,6 +133,14 @@ export interface MLModel {
   created_at: string;
 }
 
+export interface StrategyValidation {
+  valid: boolean;
+  matched_rules: string[];
+  failed_rules: string[];
+  message: string;
+  current_indicators?: Record<string, number>;
+}
+
 export interface MLPrediction {
   id: string;
   model_id: string;
@@ -150,6 +158,11 @@ export interface MLPrediction {
       trail_distance_pips: number;
       breakeven_pips: number;
     };
+    ml_signal?: 'BUY' | 'SELL' | 'HOLD';
+    strategy_validation?: StrategyValidation;
+    should_trade?: boolean;
+    current_indicators?: Record<string, number>;
+    generated_by?: 'ml_model' | 'fallback';
   };
   confidence: number;
   strategy_rules?: {

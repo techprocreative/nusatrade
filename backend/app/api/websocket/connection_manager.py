@@ -232,6 +232,9 @@ class ConnectionManager:
             })
 
         elif msg_type == "TRADE_RESULT":
+            # Update database with trade result (MT5 ticket, actual price, etc.)
+            await self._handle_trade_result(session, message)
+            
             await self.broadcast_to_user(session.user_id, {
                 "type": "TRADE_RESULT",
                 "connection_id": connection_id,
@@ -255,6 +258,65 @@ class ConnectionManager:
 
         else:
             logger.warning(f"Unknown message type from connector: {msg_type}")
+
+    async def _handle_trade_result(self, session: ConnectorSession, message: Dict[str, Any]):
+        """
+        Handle TRADE_RESULT from connector and update database.
+        
+        This updates the trade record with:
+        - MT5 ticket number
+        - Actual execution price
+        - Success/failure status
+        """
+        from app.core.database import SessionLocal
+        from app.models.trade import Trade
+        from uuid import UUID
+        
+        request_id = message.get("request_id")
+        success = message.get("success", False)
+        ticket = message.get("ticket")
+        price = message.get("price")
+        error = message.get("error")
+        
+        if not request_id:
+            logger.warning("TRADE_RESULT received without request_id")
+            return
+        
+        db = SessionLocal()
+        try:
+            # Find the trade by request_id (which is the trade UUID)
+            try:
+                trade_uuid = UUID(request_id)
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid request_id format: {request_id}")
+                return
+            
+            trade = db.query(Trade).filter(Trade.id == trade_uuid).first()
+            
+            if not trade:
+                logger.warning(f"Trade not found for request_id: {request_id}")
+                return
+            
+            # Update trade with MT5 result
+            if success and ticket:
+                trade.ticket = ticket
+                trade.mt5_executed = True
+                if price:
+                    from decimal import Decimal
+                    trade.open_price = Decimal(str(price))
+                logger.info(f"Trade {request_id} executed on MT5: ticket={ticket}, price={price}")
+            else:
+                trade.mt5_executed = False
+                trade.mt5_error = error or "Unknown error"
+                logger.warning(f"Trade {request_id} failed on MT5: {error}")
+            
+            db.commit()
+            
+        except Exception as e:
+            logger.error(f"Error handling TRADE_RESULT: {e}")
+            db.rollback()
+        finally:
+            db.close()
 
     def get_user_connections(self, user_id: str) -> List[str]:
         """Get all connection IDs for a user."""

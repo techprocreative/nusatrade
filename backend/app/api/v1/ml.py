@@ -446,14 +446,20 @@ def make_prediction(
     db: Session = Depends(deps.get_db),
     current_user=Depends(deps.get_current_user),
 ):
-    """Generate a prediction using a trained model with SL/TP recommendations."""
-    from app.services.risk_management import (
-        calculate_sl_tp,
-        get_risk_config,
-        RiskConfig,
-        SLType,
-        TPType,
-    )
+    """
+    Generate a prediction using trained ML model with strategy validation.
+    
+    This endpoint:
+    1. Loads the trained ML model
+    2. Fetches real market data
+    3. Generates ML prediction (BUY/SELL/HOLD)
+    4. Validates against linked strategy rules
+    5. Returns prediction only if ML + Strategy agree
+    """
+    from app.services.prediction_service import PredictionService
+    from app.core.logging import get_logger
+    
+    logger = get_logger(__name__)
     
     model = db.query(MLModel).filter(
         MLModel.id == model_id,
@@ -463,135 +469,67 @@ def make_prediction(
     if not model:
         raise HTTPException(status_code=404, detail="Model not found")
 
-    # Load linked strategy if exists
-    strategy = None
-    strategy_rules = None
-    if model.strategy_id:
-        strategy = db.query(Strategy).filter(Strategy.id == model.strategy_id).first()
-        if strategy:
-            # Extract strategy rules for response
-            entry_rules = []
-            exit_rules = []
-            if strategy.entry_rules:
-                entry_rules = [r.get("description", r.get("condition", "")) for r in strategy.entry_rules]
-            if strategy.exit_rules:
-                exit_rules = [r.get("description", r.get("condition", "")) for r in strategy.exit_rules]
-            if entry_rules or exit_rules:
-                strategy_rules = {"entry_rules": entry_rules, "exit_rules": exit_rules}
-
-    # Generate prediction (simplified - in production, load actual model)
-    import random
-    direction = random.choice(["BUY", "SELL", "HOLD"])
-    confidence = round(random.uniform(0.5, 0.95), 2)
-    
-    # Generate a realistic entry price based on symbol
-    # In production, this would come from live market data
-    entry_prices = {
-        "EURUSD": 1.0850,
-        "GBPUSD": 1.2650,
-        "USDJPY": 149.50,
-        "AUDUSD": 0.6550,
-        "USDCAD": 1.3650,
-        "XAUUSD": 2050.00,
-    }
-    entry_price = entry_prices.get(request.symbol.upper(), 1.0000)
-    # Add small random variation
-    entry_price = round(entry_price * (1 + random.uniform(-0.001, 0.001)), 5)
-    
-    # Use Strategy's risk_management settings if available, otherwise use default
-    risk_profile = "moderate"
-    if strategy and strategy.risk_management:
-        rm = strategy.risk_management
-        risk_config = RiskConfig(
-            sl_type=SLType(rm.get("stop_loss_type", "atr_based")),
-            sl_value=rm.get("stop_loss_value", 2.0),
-            tp_type=TPType(rm.get("take_profit_type", "risk_reward")),
-            tp_value=rm.get("take_profit_value", 2.0),
-            risk_per_trade_percent=rm.get("risk_per_trade_percent", 2.0),
-            max_position_size=rm.get("max_position_size", 0.1),
-        )
-        risk_profile = "from_strategy"
-    elif model.config and model.config.get("risk_profile"):
-        risk_profile = model.config.get("risk_profile", "moderate")
-        risk_config = get_risk_config(risk_profile)
-    else:
-        risk_config = get_risk_config(risk_profile)
-    
-    # For simplicity, use estimated ATR based on symbol volatility
-    estimated_atr = {
-        "EURUSD": 0.0008,
-        "GBPUSD": 0.0012,
-        "USDJPY": 0.80,
-        "AUDUSD": 0.0007,
-        "USDCAD": 0.0009,
-        "XAUUSD": 15.0,
-    }.get(request.symbol.upper(), 0.0010)
-    
-    stop_loss = None
-    take_profit = None
-    
-    if direction != "HOLD":
-        stop_loss, take_profit = calculate_sl_tp(
-            entry_price=entry_price,
-            direction=direction,
-            config=risk_config,
-            atr=estimated_atr,
+    # Check if model is trained
+    if not model.file_path:
+        raise HTTPException(
+            status_code=400, 
+            detail="Model not trained. Please train the model first."
         )
 
-    # Build trailing stop config from strategy if available
-    trailing_stop_config = None
-    if direction != "HOLD":
-        if strategy and strategy.risk_management and strategy.risk_management.get("trailing_stop"):
-            ts = strategy.risk_management["trailing_stop"]
-            trailing_stop_config = {
-                "enabled": ts.get("enabled", True),
-                "activation_pips": ts.get("activation_pips", 20),
-                "trail_distance_pips": ts.get("trail_distance_pips", 15),
-                "breakeven_pips": ts.get("breakeven_pips", 15),
-            }
-        else:
-            trailing_stop_config = {
-                "enabled": True,
-                "activation_pips": 20,
-                "trail_distance_pips": 15,
-                "breakeven_pips": 15,
-            }
-
-    prediction_data = {
-        "direction": direction,
-        "confidence": confidence,
-        "entry_price": entry_price,
-        "stop_loss": stop_loss,
-        "take_profit": take_profit,
-        "risk_profile": risk_profile,
-        "sl_type": risk_config.sl_type.value,
-        "tp_type": risk_config.tp_type.value,
-        "risk_reward_ratio": round(abs(take_profit - entry_price) / abs(entry_price - stop_loss), 2) if stop_loss and take_profit and stop_loss != entry_price else None,
-        "trailing_stop": trailing_stop_config,
-        "strategy_rules": strategy_rules,
-    }
-
-    # Save prediction
-    prediction_id = uuid4()
-    prediction = MLPrediction(
-        id=prediction_id,
-        model_id=model.id,
-        symbol=request.symbol,
-        prediction=prediction_data,
-        created_at=datetime.utcnow(),
-    )
-    db.add(prediction)
-    db.commit()
-
-    return PredictionResponse(
-        id=str(prediction_id),
-        model_id=str(model.id),
-        symbol=request.symbol,
-        prediction=prediction_data,
-        confidence=confidence,
-        strategy_rules=strategy_rules,
-        created_at=prediction.created_at,
-    )
+    try:
+        # Use PredictionService for unified ML + Strategy prediction
+        prediction_service = PredictionService(db)
+        result = prediction_service.generate_prediction(
+            model=model,
+            symbol=request.symbol,
+            use_strategy_rules=True,
+            save_to_db=True,
+        )
+        
+        # Build prediction_data for response
+        prediction_data = {
+            "direction": result.direction,
+            "confidence": result.confidence,
+            "entry_price": result.entry_price,
+            "stop_loss": result.stop_loss,
+            "take_profit": result.take_profit,
+            "risk_reward_ratio": result.risk_reward_ratio,
+            "trailing_stop": result.trailing_stop,
+            "strategy_rules": result.strategy_rules,
+            "ml_signal": result.ml_signal,
+            "strategy_validation": result.strategy_validation,
+            "should_trade": result.should_trade,
+            "current_indicators": result.current_indicators,
+            "generated_by": result.generated_by,
+        }
+        
+        # Get latest saved prediction ID
+        latest_prediction = db.query(MLPrediction).filter(
+            MLPrediction.model_id == model.id
+        ).order_by(MLPrediction.created_at.desc()).first()
+        
+        prediction_id = str(latest_prediction.id) if latest_prediction else str(uuid4())
+        
+        logger.info(
+            f"Prediction generated for {model.name}: "
+            f"ML={result.ml_signal}, Final={result.direction}, "
+            f"Confidence={result.confidence:.2f}, "
+            f"Strategy Valid={result.strategy_validation.get('valid', True)}"
+        )
+        
+        return PredictionResponse(
+            id=prediction_id,
+            model_id=str(model.id),
+            symbol=request.symbol,
+            prediction=prediction_data,
+            confidence=result.confidence,
+            strategy_rules=result.strategy_rules,
+            created_at=datetime.utcnow(),
+        )
+        
+    except Exception as e:
+        logger.error(f"Prediction failed for model {model_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 
 
 @router.post("/models/{model_id}/activate")
@@ -863,4 +801,42 @@ def get_auto_trading_status(
             "default_max_trades_per_day": 5,
             "default_cooldown_minutes": 30,
         }
+    }
+
+
+@router.get("/auto-trading/health")
+def get_auto_trading_health():
+    """
+    Health check endpoint for auto-trading service.
+    
+    Returns detailed status of the auto-trading scheduler and services.
+    """
+    from app.services.auto_trading import auto_trading_service
+    from datetime import timedelta
+    
+    last_run = auto_trading_service._last_run
+    is_running = auto_trading_service._is_running
+    
+    # Check if last run was within expected interval (15 min + buffer)
+    expected_interval = timedelta(minutes=20)
+    is_stale = False
+    if last_run:
+        time_since_last_run = datetime.utcnow() - last_run
+        is_stale = time_since_last_run > expected_interval
+    
+    # Count loaded models in cache
+    loaded_models_count = len(auto_trading_service._loaded_models)
+    
+    return {
+        "status": "healthy" if not is_stale else "stale",
+        "is_running": is_running,
+        "last_run": last_run.isoformat() if last_run else None,
+        "loaded_models_in_cache": loaded_models_count,
+        "is_stale": is_stale,
+        "checks": {
+            "scheduler_initialized": True,
+            "last_run_recent": not is_stale,
+            "not_stuck": not is_running or (datetime.utcnow() - last_run).seconds < 300 if last_run else True,
+        },
+        "timestamp": datetime.utcnow().isoformat(),
     }

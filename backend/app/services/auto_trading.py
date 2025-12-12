@@ -23,6 +23,7 @@ from app.models.trade import Trade
 from app.models.broker import BrokerConnection
 from app.ml.training import Trainer
 from app.ml.features import FeatureEngineer
+from app.services.market_data import MarketDataFetcher, get_default_price
 
 logger = get_logger(__name__)
 
@@ -52,96 +53,6 @@ class AutoTradingConfig:
             instance.cooldown_minutes = config.get("cooldown_minutes", cls.DEFAULT_COOLDOWN_MINUTES)
             instance.lot_size = config.get("lot_size", cls.DEFAULT_LOT_SIZE)
         return instance
-
-
-class MarketDataFetcher:
-    """Fetches real market data for prediction."""
-    
-    # Map forex symbols to yfinance tickers
-    SYMBOL_MAP = {
-        "EURUSD": "EURUSD=X",
-        "GBPUSD": "GBPUSD=X",
-        "USDJPY": "USDJPY=X",
-        "AUDUSD": "AUDUSD=X",
-        "USDCAD": "USDCAD=X",
-        "XAUUSD": "GC=F",  # Gold futures
-        "BTCUSD": "BTC-USD",
-    }
-    
-    TIMEFRAME_MAP = {
-        "M1": "1m",
-        "M5": "5m",
-        "M15": "15m",
-        "M30": "30m",
-        "H1": "1h",
-        "H4": "4h",
-        "D1": "1d",
-    }
-    
-    @classmethod
-    def fetch_data(cls, symbol: str, timeframe: str = "H1", bars: int = 200) -> Optional[pd.DataFrame]:
-        """Fetch OHLCV data from yfinance."""
-        import yfinance as yf
-        
-        ticker = cls.SYMBOL_MAP.get(symbol.upper(), f"{symbol}=X")
-        interval = cls.TIMEFRAME_MAP.get(timeframe.upper(), "1h")
-        
-        # Determine period based on interval
-        if interval in ["1m", "5m", "15m", "30m"]:
-            period = "7d"
-        elif interval in ["1h", "4h"]:
-            period = "60d"
-        else:
-            period = "2y"
-        
-        try:
-            data = yf.download(
-                ticker,
-                period=period,
-                interval=interval,
-                progress=False,
-                auto_adjust=True,
-            )
-            
-            if data.empty:
-                logger.warning(f"No data returned for {ticker}")
-                return None
-            
-            # Rename columns to lowercase
-            data.columns = [c.lower() for c in data.columns]
-            data = data.reset_index()
-            
-            # Handle timezone-aware datetime
-            if 'datetime' in data.columns:
-                data = data.rename(columns={'datetime': 'timestamp'})
-            elif 'date' in data.columns:
-                data = data.rename(columns={'date': 'timestamp'})
-            
-            # Only return last N bars
-            data = data.tail(bars).reset_index(drop=True)
-            
-            logger.info(f"Fetched {len(data)} bars for {symbol} ({timeframe})")
-            return data
-            
-        except Exception as e:
-            logger.error(f"Failed to fetch data for {symbol}: {e}")
-            return None
-    
-    @classmethod
-    def get_current_price(cls, symbol: str) -> Optional[float]:
-        """Get current market price."""
-        import yfinance as yf
-        
-        ticker = cls.SYMBOL_MAP.get(symbol.upper(), f"{symbol}=X")
-        
-        try:
-            data = yf.download(ticker, period="1d", interval="1m", progress=False)
-            if not data.empty:
-                return float(data['Close'].iloc[-1])
-        except Exception as e:
-            logger.error(f"Failed to get current price for {symbol}: {e}")
-        
-        return None
 
 
 class AutoTradingService:
@@ -313,114 +224,61 @@ class AutoTradingService:
     async def _generate_real_prediction(
         self, db: Session, model: MLModel, config: AutoTradingConfig
     ) -> Optional[Dict[str, Any]]:
-        """Generate a prediction using the actual trained ML model."""
-        from app.services.risk_management import (
-            calculate_sl_tp,
-            get_risk_config,
-            RiskConfig,
-            SLType,
-            TPType,
-        )
+        """
+        Generate a prediction using trained ML model with strategy validation.
+        
+        Uses PredictionService for unified ML + Strategy rule evaluation.
+        Only returns actionable predictions if both ML and strategy rules agree.
+        """
+        from app.services.prediction_service import PredictionService
         
         symbol = model.symbol or "EURUSD"
-        timeframe = model.timeframe or "H1"
-        
-        # Load the trained model
-        trainer = self._load_model(model)
-        if trainer is None:
-            logger.warning(f"Could not load model for {model.name}, using fallback")
-            # Fallback: still generate a prediction but mark it
-            return await self._generate_fallback_prediction(db, model, config)
-        
-        # Fetch real market data
-        market_data = MarketDataFetcher.fetch_data(symbol, timeframe, bars=200)
-        
-        if market_data is None or len(market_data) < 50:
-            logger.error(f"Insufficient market data for {symbol}")
-            return None
-        
-        # Build features
-        feature_engineer = FeatureEngineer()
-        featured_data = feature_engineer.build_features(market_data)
-        
-        # Get the last row for prediction (most recent data)
-        last_row = featured_data.iloc[[-1]]
         
         try:
-            # Make prediction using trained model
-            prediction_result = trainer.predict(last_row)
+            # Use PredictionService for unified ML + Strategy prediction
+            prediction_service = PredictionService(db)
+            result = prediction_service.generate_prediction(
+                model=model,
+                symbol=symbol,
+                use_strategy_rules=True,
+                save_to_db=True,
+            )
             
-            direction = prediction_result.get("direction", "HOLD")
-            confidence = prediction_result.get("confidence", 0.5)
+            # Log strategy validation result
+            strategy_valid = result.strategy_validation.get("valid", True)
+            if not strategy_valid and result.ml_signal != "HOLD":
+                logger.info(
+                    f"Model {model.name}: ML signal {result.ml_signal} blocked by strategy. "
+                    f"Matched: {result.strategy_validation.get('matched_rules', [])}, "
+                    f"Failed: {result.strategy_validation.get('failed_rules', [])}"
+                )
             
-            # Get current price
-            entry_price = MarketDataFetcher.get_current_price(symbol)
-            if entry_price is None:
-                entry_price = float(market_data["close"].iloc[-1])
+            logger.info(
+                f"Generated prediction for {model.name}: "
+                f"ML={result.ml_signal}, Final={result.direction}, "
+                f"Confidence={result.confidence:.2%}, Strategy Valid={strategy_valid}"
+            )
+            
+            # Convert PredictionResult to dict for compatibility
+            prediction_data = {
+                "direction": result.direction,
+                "confidence": result.confidence,
+                "entry_price": result.entry_price,
+                "stop_loss": result.stop_loss,
+                "take_profit": result.take_profit,
+                "ml_signal": result.ml_signal,
+                "strategy_validation": result.strategy_validation,
+                "should_trade": result.should_trade,
+                "generated_by": result.generated_by,
+                "model_type": result.model_type,
+                "timestamp": result.timestamp,
+            }
+            
+            return prediction_data
             
         except Exception as e:
-            logger.error(f"Model prediction failed: {e}")
+            logger.error(f"Prediction failed for model {model.name}: {e}")
             return await self._generate_fallback_prediction(db, model, config)
-        
-        # Load linked strategy for risk management
-        strategy = None
-        if model.strategy_id:
-            strategy = db.query(Strategy).filter(Strategy.id == model.strategy_id).first()
-        
-        # Get risk config
-        if strategy and strategy.risk_management:
-            rm = strategy.risk_management
-            risk_config = RiskConfig(
-                sl_type=SLType(rm.get("stop_loss_type", "atr_based")),
-                sl_value=rm.get("stop_loss_value", 2.0),
-                tp_type=TPType(rm.get("take_profit_type", "risk_reward")),
-                tp_value=rm.get("take_profit_value", 2.0),
-                risk_per_trade_percent=rm.get("risk_per_trade_percent", 2.0),
-                max_position_size=rm.get("max_position_size", 0.1),
-            )
-        else:
-            risk_config = get_risk_config("moderate")
-        
-        # Calculate ATR for SL/TP
-        atr = self._calculate_atr(market_data)
-        
-        stop_loss = None
-        take_profit = None
-        
-        if direction != "HOLD":
-            stop_loss, take_profit = calculate_sl_tp(
-                entry_price=entry_price,
-                direction=direction,
-                config=risk_config,
-                atr=atr,
-            )
-        
-        prediction_data = {
-            "direction": direction,
-            "confidence": confidence,
-            "entry_price": entry_price,
-            "stop_loss": stop_loss,
-            "take_profit": take_profit,
-            "probabilities": prediction_result.get("probabilities", {}),
-            "generated_by": "ml_model",
-            "model_type": model.model_type,
-            "timestamp": datetime.utcnow().isoformat(),
-        }
-        
-        # Save prediction to database
-        prediction = MLPrediction(
-            id=uuid4(),
-            model_id=model.id,
-            symbol=symbol,
-            prediction=prediction_data,
-            created_at=datetime.utcnow(),
-        )
-        db.add(prediction)
-        db.commit()
-        
-        logger.info(f"Generated REAL prediction for {model.name}: {direction} @ {entry_price} (confidence: {confidence:.2%})")
-        
-        return prediction_data
     
     async def _generate_fallback_prediction(
         self, db: Session, model: MLModel, config: AutoTradingConfig
@@ -434,12 +292,7 @@ class AutoTradingService:
         # Get current price
         entry_price = MarketDataFetcher.get_current_price(symbol)
         if entry_price is None:
-            # Use default prices
-            default_prices = {
-                "EURUSD": 1.0850, "GBPUSD": 1.2650, "USDJPY": 149.50,
-                "AUDUSD": 0.6550, "USDCAD": 1.3650, "XAUUSD": 2050.00,
-            }
-            entry_price = default_prices.get(symbol.upper(), 1.0)
+            entry_price = get_default_price(symbol)
         
         # Conservative prediction for fallback
         direction = "HOLD"  # Don't trade if model fails

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, String, DateTime, Numeric, BigInteger, Integer, ForeignKey
+from sqlalchemy import Column, String, DateTime, Numeric, BigInteger, Integer, ForeignKey, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.database import Base
@@ -31,6 +31,8 @@ class Trade(Base):
     source = Column(String(50))
     status = Column(String(20), default="open")  # open, closed, pending
     ml_model_id = Column(UUID(as_uuid=True), nullable=True)
+    mt5_executed = Column(Boolean, default=False)  # True if executed on MT5
+    mt5_error = Column(String(500), nullable=True)  # Error message if MT5 execution failed
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

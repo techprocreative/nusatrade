@@ -88,27 +88,89 @@ function PredictionCard({
   const [lotSize, setLotSize] = useState("0.1");
   const pred = prediction.prediction;
   const isHold = pred.direction === "HOLD";
+  const strategyValidation = pred.strategy_validation;
+  const mlSignal = pred.ml_signal;
+  const wasBlocked = mlSignal && mlSignal !== "HOLD" && pred.direction === "HOLD";
 
   return (
-    <Card className="border-2 border-primary/50">
+    <Card className={`border-2 ${wasBlocked ? "border-yellow-500/50" : "border-primary/50"}`}>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center justify-between">
           <span className="flex items-center gap-2">
             <Zap className="w-5 h-5 text-yellow-500" />
             ML Signal
           </span>
-          <Badge variant={pred.direction === "BUY" ? "default" : pred.direction === "SELL" ? "destructive" : "secondary"}>
-            {pred.direction}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {mlSignal && mlSignal !== pred.direction && (
+              <Badge variant="outline" className="text-xs">
+                ML: {mlSignal}
+              </Badge>
+            )}
+            <Badge variant={pred.direction === "BUY" ? "default" : pred.direction === "SELL" ? "destructive" : "secondary"}>
+              {pred.direction}
+            </Badge>
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Strategy Validation Status */}
+        {strategyValidation && (
+          <div className={`p-3 rounded-lg border ${
+            strategyValidation.valid 
+              ? "bg-green-500/10 border-green-500/30" 
+              : "bg-yellow-500/10 border-yellow-500/30"
+          }`}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium flex items-center gap-2">
+                {strategyValidation.valid ? (
+                  <>
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                    <span className="text-green-400">Strategy Confirmed</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-4 h-4 text-yellow-500" />
+                    <span className="text-yellow-400">Strategy Blocked</span>
+                  </>
+                )}
+              </span>
+            </div>
+            {strategyValidation.matched_rules && strategyValidation.matched_rules.length > 0 && (
+              <div className="text-xs text-green-400">
+                Matched: {strategyValidation.matched_rules.join(", ")}
+              </div>
+            )}
+            {strategyValidation.failed_rules && strategyValidation.failed_rules.length > 0 && (
+              <div className="text-xs text-yellow-400">
+                Failed: {strategyValidation.failed_rules.join(", ")}
+              </div>
+            )}
+            {strategyValidation.message && (
+              <div className="text-xs text-muted-foreground mt-1">
+                {strategyValidation.message}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center justify-between">
           <span className="text-muted-foreground">Confidence</span>
           <span className={`font-bold ${pred.confidence >= 0.7 ? "text-green-500" : pred.confidence >= 0.5 ? "text-yellow-500" : "text-red-500"}`}>
             {(pred.confidence * 100).toFixed(1)}%
           </span>
         </div>
+
+        {/* Current Indicators */}
+        {pred.current_indicators && Object.keys(pred.current_indicators).length > 0 && (
+          <div className="text-xs p-2 bg-slate-800/50 rounded border border-slate-700">
+            <p className="text-slate-400 font-medium mb-1">Current Indicators:</p>
+            <div className="grid grid-cols-3 gap-1 text-muted-foreground">
+              {Object.entries(pred.current_indicators).slice(0, 6).map(([key, value]) => (
+                <span key={key}>{key}: {typeof value === 'number' ? value.toFixed(2) : value}</span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {!isHold && (
           <>
