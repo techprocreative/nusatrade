@@ -1,5 +1,6 @@
 """Endpoint-specific rate limiting decorators."""
 
+import inspect
 from functools import wraps
 from typing import Callable
 
@@ -28,8 +29,11 @@ def rate_limit(
             pass
     """
     def decorator(func: Callable):
+        # Check if function is async
+        is_async = inspect.iscoroutinefunction(func)
+
         @wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def async_wrapper(*args, **kwargs):
             # Extract request from args/kwargs
             request = None
             for arg in args:
@@ -38,49 +42,56 @@ def rate_limit(
                     break
             if not request and "request" in kwargs:
                 request = kwargs["request"]
-            
+
             if not request:
                 # No request object, skip rate limiting
-                return await func(*args, **kwargs) if callable(getattr(func, "__call__", None)) else func(*args, **kwargs)
-            
+                if is_async:
+                    return await func(*args, **kwargs)
+                else:
+                    return func(*args, **kwargs)
+
             # Generate rate limit key
             if key_func:
                 key = key_func(request)
             else:
                 client_ip = request.client.host if request.client else "unknown"
                 key = f"{request.url.path}:{client_ip}"
-            
+
             rate_limiter = get_rate_limiter()
-            
+
             # Check per-minute limit
             allowed, remaining = rate_limiter.is_allowed(
                 f"rpm:{key}", requests_per_minute, 60
             )
-            
+
             if not allowed:
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     detail=f"Rate limit exceeded. Maximum {requests_per_minute} requests per minute.",
                     headers={"Retry-After": "60"}
                 )
-            
+
             # Check per-hour limit if specified
             if requests_per_hour:
                 allowed_hour, remaining_hour = rate_limiter.is_allowed(
                     f"rph:{key}", requests_per_hour, 3600
                 )
-                
+
                 if not allowed_hour:
                     raise HTTPException(
                         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                         detail=f"Hourly rate limit exceeded. Maximum {requests_per_hour} requests per hour.",
                         headers={"Retry-After": "3600"}
                     )
-            
-            # Call the original function
-            return await func(*args, **kwargs) if callable(getattr(func, "__call__", None)) else func(*args, **kwargs)
-        
-        return wrapper
+
+            # Call the original function (check if async or sync)
+            if is_async:
+                return await func(*args, **kwargs)
+            else:
+                return func(*args, **kwargs)
+
+        # FastAPI can handle async wrappers for both sync and async endpoints
+        return async_wrapper
     return decorator
 
 
