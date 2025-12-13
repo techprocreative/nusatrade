@@ -51,6 +51,10 @@ else
     exit 1
 fi
 
+# Fix model paths (for existing databases with incorrect paths)
+echo "🔧 Fixing model paths..."
+python3 scripts/fix_model_paths.py || echo "⚠️  Model path fix had warnings (non-fatal)"
+
 # Seed default models (safe to run multiple times)
 echo "🌱 Seeding default models..."
 python3 scripts/seed_default_models.py || echo "⚠️  Seeding had warnings (non-fatal)"
