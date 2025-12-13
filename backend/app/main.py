@@ -67,13 +67,20 @@ async def lifespan(app: FastAPI):
 
 cors_origins = settings.cors_origins()
 
+# SECURITY: Explicitly disable API docs in production to prevent information disclosure
+# API docs reveal internal structure, endpoints, schemas, and authentication methods
+_docs_enabled = settings.is_development and not settings.is_production
+if settings.is_production and _docs_enabled:
+    raise RuntimeError("CRITICAL: API docs cannot be enabled in production (security risk)")
+
 app = FastAPI(
     title=settings.app_name,
     version="1.0.0",
     description="AI-powered forex trading platform with ML bots and LLM supervisor",
     lifespan=lifespan,
-    docs_url="/docs" if settings.is_development else None,
-    redoc_url="/redoc" if settings.is_development else None,
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,  # Also disable OpenAPI schema
 )
 
 # Setup custom middleware stack

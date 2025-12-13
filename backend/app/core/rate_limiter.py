@@ -55,7 +55,7 @@ class RedisRateLimiter:
             pipe.zadd(key, {str(now): now})  # Add current request
             pipe.zcard(key)  # Count requests in window
             pipe.expire(key, window_seconds)  # Set TTL
-            
+
             results = pipe.execute()
             count = results[2]  # zcard result
 
@@ -64,8 +64,18 @@ class RedisRateLimiter:
 
         except Exception as e:
             logger.error(f"Redis rate limit check failed: {e}")
-            # Fallback to allowing request on error
-            return (True, limit)
+            # CRITICAL CHANGE: Fail-closed instead of fail-open
+            # In production, it's safer to block requests than allow unlimited access
+            # This prevents DDoS/abuse when Redis is down
+            from app.config import get_settings
+            settings = get_settings()
+
+            if settings.is_production:
+                logger.critical(f"PRODUCTION: Blocking request due to Redis failure (fail-closed)")
+                return (False, 0)  # BLOCK the request
+            else:
+                logger.warning(f"DEVELOPMENT: Allowing request despite Redis failure (fail-open)")
+                return (True, limit)  # Allow in development
 
     def _memory_check(self, key: str, limit: int, window_seconds: int) -> Tuple[bool, int]:
         """Check rate limit using in-memory storage (fallback)."""

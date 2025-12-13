@@ -23,3 +23,8 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+# Ignore large data files
+ohlcv/**/*.csv
+models/*.pkl
+backend/models/*.pkl
+*.csv

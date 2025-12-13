@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.api import deps
 from app.core import security
 from app.core.security import validate_password_strength, account_lockout
+from app.core.rate_limit_decorators import rate_limit_auth
 from app.models.user import User
 from app.schemas.user import UserCreate, UserLogin, UserOut
 from app.schemas.auth import Token, TokenWithRefresh
@@ -15,6 +16,7 @@ router = APIRouter()
 
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+@rate_limit_auth  # SECURITY: Limit registration attempts to prevent abuse
 def register(user_in: UserCreate, db: Session = Depends(deps.get_db)):
     # Validate password strength
     is_valid, error_msg = validate_password_strength(user_in.password)
@@ -33,6 +35,7 @@ def register(user_in: UserCreate, db: Session = Depends(deps.get_db)):
 
 
 @router.post("/login", response_model=TokenWithRefresh)
+@rate_limit_auth  # SECURITY: Limit login attempts to prevent brute force
 def login(user_in: UserLogin, db: Session = Depends(deps.get_db)):
     """Login endpoint (for users without 2FA or legacy clients)."""
     # Check lockout
@@ -70,6 +73,7 @@ def login(user_in: UserLogin, db: Session = Depends(deps.get_db)):
 
 
 @router.post("/login-2fa", response_model=TokenWithRefresh)
+@rate_limit_auth  # SECURITY: Limit 2FA attempts to prevent code guessing
 def login_with_2fa(request: LoginWith2FARequest, db: Session = Depends(deps.get_db)):
     """Login endpoint for users with 2FA enabled."""
     # Check lockout
@@ -168,6 +172,7 @@ def refresh(refresh_token: str, db: Session = Depends(deps.get_db)):
 
 
 @router.post("/forgot-password")
+@rate_limit_auth  # SECURITY: Prevent password reset flooding
 def forgot_password(email: str, db: Session = Depends(deps.get_db)):
     """Request password reset email."""
     from app.services import email_service
@@ -195,6 +200,7 @@ def forgot_password(email: str, db: Session = Depends(deps.get_db)):
 
 
 @router.post("/reset-password")
+@rate_limit_auth  # SECURITY: Prevent password reset abuse
 def reset_password(token: str, new_password: str, db: Session = Depends(deps.get_db)):
     """Reset password with token."""
     from app.services import email_service

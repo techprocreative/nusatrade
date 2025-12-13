@@ -14,6 +14,9 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 
 from app.ml.features import FeatureEngineer
 from app.core.validators import sanitize_model_path
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class Trainer:
@@ -171,7 +174,12 @@ class Trainer:
         }
 
     def predict(self, features: pd.DataFrame) -> Dict[str, Any]:
-        """Make prediction with trained model."""
+        """
+        Make prediction with trained model.
+
+        CRITICAL: Returns HOLD signal when confidence is below threshold.
+        This prevents trading on low-confidence predictions.
+        """
         if self.model is None:
             raise ValueError("Model not trained. Call train() first.")
 
@@ -182,13 +190,28 @@ class Trainer:
         prediction = self.model.predict(X_scaled)
         probability = self.model.predict_proba(X_scaled)
 
+        # Get confidence (max probability)
+        buy_prob = float(probability[0][1])
+        sell_prob = float(probability[0][0])
+        confidence = max(buy_prob, sell_prob)
+
+        # CRITICAL: Implement HOLD signal for low confidence
+        # Default threshold: 60% (adjustable per model)
+        confidence_threshold = 0.60
+
+        if confidence < confidence_threshold:
+            direction = "HOLD"
+            logger.info(f"Low confidence ({confidence:.2%} < {confidence_threshold:.2%}), returning HOLD")
+        else:
+            direction = "BUY" if prediction[0] == 1 else "SELL"
+
         return {
             "prediction": int(prediction[0]),
-            "direction": "BUY" if prediction[0] == 1 else "SELL",
-            "confidence": float(max(probability[0])),
+            "direction": direction,
+            "confidence": confidence,
             "probabilities": {
-                "sell": float(probability[0][0]),
-                "buy": float(probability[0][1]),
+                "sell": sell_prob,
+                "buy": buy_prob,
             },
         }
 

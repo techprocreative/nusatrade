@@ -1,0 +1,12 @@
+# Optimal XGBoost Configuration
+# Generated: 2025-12-13 00:31:24
+
+model_path = 'models/model_xgboost_20251212_235414.pkl'
+confidence_threshold = 0.7
+# Session + Vol (70% conf)
+
+# Expected Performance (2024-2025 backtest):
+# Win Rate: 75.0%
+# Profit Factor: 2.02
+# Net Profit: $19.67
+# Trades/Year: 20

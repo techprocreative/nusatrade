@@ -18,6 +18,7 @@ from app.schemas.trading import (
 from app.services import trading_service
 from app.config import get_settings
 from app.core.logging import get_logger
+from app.core.rate_limit_decorators import rate_limit_trading  # SECURITY: Rate limiting
 from app.core.validators import (
     validate_uuid,
     validate_symbol,
@@ -47,6 +48,7 @@ def list_positions(db: Session = Depends(deps.get_db), current_user=Depends(deps
 
 
 @router.post("/orders", response_model=TradeOutWithMT5, status_code=status.HTTP_201_CREATED)
+@rate_limit_trading  # SECURITY: Prevent rapid-fire trading abuse
 async def create_order(order: OrderCreate, db: Session = Depends(deps.get_db), current_user=Depends(deps.get_current_user)):
     # Validate symbol format
     validated_symbol = validate_symbol(order.symbol)
