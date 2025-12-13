@@ -3,6 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import Column, String, DateTime, Boolean, JSON
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 
 from app.core.database import Base
 
@@ -43,7 +44,10 @@ class User(Base):
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
+    # Relationships
+    default_models = relationship("UserDefaultModel", back_populates="user", cascade="all, delete-orphan")
+
     @property
     def is_admin(self) -> bool:
         """Check if user has admin role."""
