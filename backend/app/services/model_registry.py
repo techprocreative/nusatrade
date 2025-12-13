@@ -13,7 +13,7 @@ import shutil
 import pickle
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, asdict
 import json
 
@@ -61,6 +61,13 @@ class MLModelRegistry:
         self.staging_dir = self.base_path / "staging"
         self.production_dir = self.base_path / "production"
         self.archive_dir = self.base_path / "archive"
+
+        # Symbol-specific directories
+        self.symbol_dirs = {
+            "XAUUSD": self.base_path,  # Root for backward compatibility
+            "EURUSD": self.base_path / "eurusd" / "forex-optimized",
+            "BTCUSD": self.base_path / "btcusd" / "crypto-optimized",
+        }
 
         # Create directories
         for dir_path in [self.staging_dir, self.production_dir, self.archive_dir]:
@@ -288,6 +295,68 @@ class MLModelRegistry:
                 logger.error(f"Failed to delete {model_file}: {e}")
 
         return deleted
+
+    def list_models_by_symbol(self, symbol: str) -> List[Dict[str, Any]]:
+        """List all available models for a specific symbol."""
+        symbol_dir = self.symbol_dirs.get(symbol)
+        if not symbol_dir or not symbol_dir.exists():
+            return []
+
+        models = []
+        for model_file in symbol_dir.glob("*.pkl"):
+            if model_file.name.startswith('.'):
+                continue
+
+            metadata_file = model_file.with_suffix('.json')
+            metadata = {}
+
+            if metadata_file.exists():
+                try:
+                    with open(metadata_file) as f:
+                        metadata = json.load(f)
+                except Exception as e:
+                    logger.warning(f"Failed to load metadata for {model_file}: {e}")
+
+            models.append({
+                "model_id": model_file.stem,
+                "model_path": str(model_file.relative_to(self.base_path)),
+                "symbol": symbol,
+                "file_size": model_file.stat().st_size,
+                "created_at": datetime.fromtimestamp(model_file.stat().st_ctime).isoformat(),
+                "metadata": metadata
+            })
+
+        return sorted(models, key=lambda x: x['created_at'], reverse=True)
+
+    def get_model_info(self, model_path: str) -> Optional[Dict[str, Any]]:
+        """Get detailed info about a specific model."""
+        full_path = self.base_path / model_path
+        if not full_path.exists():
+            return None
+
+        metadata_file = full_path.with_suffix('.json')
+        metadata = {}
+        if metadata_file.exists():
+            try:
+                with open(metadata_file) as f:
+                    metadata = json.load(f)
+            except Exception as e:
+                logger.warning(f"Failed to load metadata for {model_path}: {e}")
+
+        return {
+            "model_path": model_path,
+            "file_size": full_path.stat().st_size,
+            "created_at": datetime.fromtimestamp(full_path.stat().st_ctime).isoformat(),
+            "modified_at": datetime.fromtimestamp(full_path.stat().st_mtime).isoformat(),
+            "metadata": metadata
+        }
+
+    def get_all_symbols_models(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Get all models grouped by symbol."""
+        result = {}
+        for symbol in self.symbol_dirs.keys():
+            result[symbol] = self.list_models_by_symbol(symbol)
+        return result
 
 
 # Global registry instance

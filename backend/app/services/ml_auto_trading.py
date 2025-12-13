@@ -73,7 +73,7 @@ class MLAutoTradingService:
         Process a trading signal for auto-trading.
 
         Steps:
-        1. Validate symbol compatibility
+        1. Auto-select default model for symbol
         2. Load recent market data
         3. Generate ML prediction
         4. Validate against strategy rules
@@ -82,11 +82,13 @@ class MLAutoTradingService:
         Args:
             db: Database session
             user_id: User ID
-            symbol: Trading symbol (must be XAUUSD for current model)
+            symbol: Trading symbol (auto-selects appropriate model)
 
         Returns:
             Result with prediction and execution status
         """
+        from app.services.default_model_service import get_default_model_service
+
         result = {
             "timestamp": datetime.utcnow().isoformat(),
             "symbol": symbol,
@@ -96,21 +98,41 @@ class MLAutoTradingService:
             "reason": None,
         }
 
-        # Validate symbol before proceeding
-        from app.strategies.ml_profitable_strategy import MLProfitableStrategy
+        # AUTO-SELECT: Get default model for this symbol
+        model_service = get_default_model_service()
+        default_model = model_service.get_default_model_for_symbol(
+            db, symbol, user_id=user_id
+        )
 
-        if not MLProfitableStrategy.is_symbol_supported(symbol):
-            supported = MLProfitableStrategy.get_supported_symbols()
-            result["reason"] = (
-                f"Symbol '{symbol}' is not supported by this ML model. "
-                f"Supported symbols: {supported}. "
-                f"The current model is trained exclusively on XAUUSD data."
-            )
+        if not default_model:
+            result["reason"] = f"No default model configured for {symbol}"
             logger.warning(result["reason"])
             return result
 
-        # Initialize predictor
-        await self.initialize_predictor()
+        # Initialize predictor with symbol-specific model
+        if (self.predictor is None or
+            getattr(self.predictor, 'symbol', None) != symbol or
+            getattr(self.predictor, 'model_path', None) != default_model['model_path']):
+
+            logger.info(f"Loading model for {symbol}: {default_model['model_id']}")
+
+            try:
+                self.predictor = OptimizedTradingPredictor(
+                    model_path=default_model['model_path'],
+                    confidence_threshold=self.strategy_config["confidence_threshold"],
+                    tp_sl_ratio=2.0,
+                    use_session_filter=self.strategy_config["use_session_filter"],
+                    use_volatility_filter=self.strategy_config["use_volatility_filter"],
+                    use_trend_filter=self.strategy_config["use_trend_filter"],
+                    symbol=symbol  # Pass symbol to predictor
+                )
+                # Store for reload check
+                self.predictor.model_path = default_model['model_path']
+
+            except Exception as e:
+                result["reason"] = f"Failed to load model for {symbol}: {str(e)}"
+                logger.error(result["reason"])
+                return result
 
         if self.predictor is None:
             result["reason"] = "Predictor not initialized"
