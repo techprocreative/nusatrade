@@ -5,11 +5,11 @@ echo "🚀 Starting production backend..."
 
 # Download ML models from R2 storage
 echo "📥 Downloading ML models from R2..."
-python scripts/download_models_from_r2.py || echo "⚠️  Model download had warnings (non-fatal)"
+python3 scripts/download_models_from_r2.py || echo "⚠️  Model download had warnings (non-fatal)"
 
 # Wait for database to be ready
 echo "⏳ Waiting for database..."
-python -c "
+python3 -c "
 import time
 import psycopg2
 from app.config import get_settings
