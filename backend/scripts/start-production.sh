@@ -3,10 +3,6 @@ set -e
 
 echo "🚀 Starting production backend..."
 
-# Download ML models from R2 storage
-echo "📥 Downloading ML models from R2..."
-python3 scripts/download_models_from_r2.py || echo "⚠️  Model download had warnings (non-fatal)"
-
 # Wait for database to be ready
 echo "⏳ Waiting for database..."
 python3 -c "
