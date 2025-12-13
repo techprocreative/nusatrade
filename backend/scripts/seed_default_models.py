@@ -53,7 +53,7 @@ def seed_default_models():
             (
                 gen_random_uuid(),
                 'XAUUSD',
-                'models/model_xgboost_20251212_235414.pkl',
+                'model_xgboost_20251212_235414.pkl',
                 'model_xgboost_20251212_235414',
                 75.0,
                 2.02,
@@ -64,7 +64,7 @@ def seed_default_models():
             (
                 gen_random_uuid(),
                 'EURUSD',
-                'models/eurusd/forex-optimized/model_forex_xgboost_20251213_112218.pkl',
+                'eurusd/forex-optimized/model_forex_xgboost_20251213_112218.pkl',
                 'model_forex_xgboost_20251213_112218',
                 79.1,
                 3.77,
@@ -75,7 +75,7 @@ def seed_default_models():
             (
                 gen_random_uuid(),
                 'BTCUSD',
-                'models/btcusd/crypto-optimized/model_crypto_xgboost_20251213_104319.pkl',
+                'btcusd/crypto-optimized/model_crypto_xgboost_20251213_104319.pkl',
                 'model_crypto_xgboost_20251213_104319',
                 NULL,
                 1.14,

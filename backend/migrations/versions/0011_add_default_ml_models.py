@@ -61,7 +61,7 @@ def upgrade():
         (
             gen_random_uuid(),
             'XAUUSD',
-            'models/model_xgboost_20251212_235414.pkl',
+            'model_xgboost_20251212_235414.pkl',
             'model_xgboost_20251212_235414',
             75.0,
             2.02,
@@ -72,7 +72,7 @@ def upgrade():
         (
             gen_random_uuid(),
             'EURUSD',
-            'models/eurusd/forex-optimized/model_forex_xgboost_20251213_112218.pkl',
+            'eurusd/forex-optimized/model_forex_xgboost_20251213_112218.pkl',
             'model_forex_xgboost_20251213_112218',
             79.1,
             3.77,
