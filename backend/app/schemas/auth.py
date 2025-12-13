@@ -9,6 +9,7 @@ class Token(BaseModel):
 class TokenWithRefresh(BaseModel):
     access_token: str
     refresh_token: str
+    user_id: str  # Required by connector
     token_type: str = "bearer"
 
 

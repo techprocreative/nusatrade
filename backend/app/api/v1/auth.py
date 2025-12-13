@@ -69,7 +69,11 @@ def login(user_in: UserLogin, db: Session = Depends(deps.get_db)):
     
     access_token = security.create_access_token(subject=user.email)
     refresh_token = security.create_refresh_token(subject=user.email)
-    return TokenWithRefresh(access_token=access_token, refresh_token=refresh_token)
+    return TokenWithRefresh(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user_id=str(user.id)  # Include user_id for connector
+    )
 
 
 @router.post("/login-2fa", response_model=TokenWithRefresh)
@@ -121,7 +125,11 @@ def login_with_2fa(request: LoginWith2FARequest, db: Session = Depends(deps.get_
     # Generate tokens
     access_token = security.create_access_token(subject=user.email)
     refresh_token = security.create_refresh_token(subject=user.email)
-    return TokenWithRefresh(access_token=access_token, refresh_token=refresh_token)
+    return TokenWithRefresh(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user_id=str(user.id)  # Include user_id for connector
+    )
 
 
 @router.post("/logout")
@@ -168,7 +176,11 @@ def refresh(refresh_token: str, db: Session = Depends(deps.get_db)):
     # Generate new tokens
     new_access_token = security.create_access_token(subject=user.email)
     new_refresh_token = security.create_refresh_token(subject=user.email)
-    return TokenWithRefresh(access_token=new_access_token, refresh_token=new_refresh_token)
+    return TokenWithRefresh(
+        access_token=new_access_token,
+        refresh_token=new_refresh_token,
+        user_id=str(user.id)  # Include user_id for connector
+    )
 
 
 @router.post("/forgot-password")
