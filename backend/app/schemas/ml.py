@@ -1,11 +1,13 @@
 """Pydantic schemas for ML models."""
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 
 class ModelInfo(BaseModel):
     """Information about a single model file."""
+    model_config = ConfigDict(protected_namespaces=())  # Allow model_ prefix
+
     model_id: str
     model_path: str
     symbol: str
@@ -16,6 +18,8 @@ class ModelInfo(BaseModel):
 
 class DefaultModelResponse(BaseModel):
     """Response for default model information."""
+    model_config = ConfigDict(protected_namespaces=())  # Allow model_ prefix
+
     model_path: str
     model_id: str
     symbol: str
@@ -28,6 +32,8 @@ class DefaultModelResponse(BaseModel):
 
 class SetDefaultModelRequest(BaseModel):
     """Request to set a default model."""
+    model_config = ConfigDict(protected_namespaces=())  # Allow model_ prefix
+
     model_path: str
     model_id: str
 
