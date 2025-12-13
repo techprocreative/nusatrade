@@ -4,7 +4,12 @@ ML Profitable Strategy - Default strategy that uses profitable XGBoost model.
 This strategy integrates the profitable ML model (75% win rate, 2.02 profit factor)
 with structured entry/exit rules for auto-trading execution.
 
+⚠️  IMPORTANT: This model is trained ONLY on XAUUSD (Gold) data.
+    Do NOT use this strategy for other symbols (EURUSD, BTCUSD, etc.)
+    as it will produce unreliable predictions.
+
 Configuration:
+- Symbol: XAUUSD ONLY
 - Model: XGBoost (models/model_xgboost_20251212_235414.pkl)
 - Confidence Threshold: 70%
 - Filters: Session + Volatility
@@ -26,7 +31,10 @@ class MLProfitableStrategy:
     """
     Production-ready ML strategy with proven profitability.
 
-    Performance (2024-2025 backtest):
+    ⚠️  SYMBOL RESTRICTION: This strategy is trained ONLY for XAUUSD (Gold).
+        Using it for other symbols will result in poor performance.
+
+    Performance (2024-2025 backtest on XAUUSD):
     - Win Rate: 75.0%
     - Profit Factor: 2.02
     - Expected Trades: ~20/year
@@ -38,8 +46,12 @@ class MLProfitableStrategy:
     DESCRIPTION = "Profitable ML strategy using XGBoost with session + volatility filters"
     STRATEGY_TYPE = "ai_generated"
 
+    # Symbol restriction
+    SUPPORTED_SYMBOLS = ["XAUUSD"]  # This model is XAUUSD-only
+
     # Default configuration
     DEFAULT_CONFIG = {
+        "symbol": "XAUUSD",  # Lock to XAUUSD only
         "model_path": "models/model_xgboost_20251212_235414.pkl",
         "confidence_threshold": 0.70,  # 70% confidence minimum
         "use_session_filter": True,    # Only London/NY hours
@@ -57,8 +69,22 @@ class MLProfitableStrategy:
     }
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
-        """Initialize strategy with configuration."""
+        """
+        Initialize strategy with configuration.
+
+        Raises:
+            ValueError: If symbol is not XAUUSD
+        """
         self.config = {**self.DEFAULT_CONFIG, **(config or {})}
+
+        # Validate symbol
+        symbol = self.config.get("symbol", "XAUUSD")
+        if symbol not in self.SUPPORTED_SYMBOLS:
+            raise ValueError(
+                f"Invalid symbol '{symbol}'. This strategy only supports {self.SUPPORTED_SYMBOLS}. "
+                f"The model is trained exclusively on XAUUSD data and will not work correctly for other symbols."
+            )
+
         self.model = None
         self.scaler = None
         self.feature_columns = None
@@ -256,6 +282,29 @@ class MLProfitableStrategy:
                 "description": "Default lot size for trades"
             },
         ]
+
+    @staticmethod
+    def get_supported_symbols() -> List[str]:
+        """
+        Get list of symbols supported by this strategy.
+
+        Returns:
+            List of supported symbol codes (currently only XAUUSD)
+        """
+        return MLProfitableStrategy.SUPPORTED_SYMBOLS.copy()
+
+    @staticmethod
+    def is_symbol_supported(symbol: str) -> bool:
+        """
+        Check if a symbol is supported by this strategy.
+
+        Args:
+            symbol: Symbol code to check
+
+        Returns:
+            True if symbol is supported, False otherwise
+        """
+        return symbol in MLProfitableStrategy.SUPPORTED_SYMBOLS
 
     def to_database_format(self, user_id: str) -> Dict[str, Any]:
         """

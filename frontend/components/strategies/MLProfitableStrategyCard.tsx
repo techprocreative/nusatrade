@@ -77,9 +77,12 @@ export function MLProfitableStrategyCard({ onClone }: MLProfitableStrategyCardPr
               <Badge variant="default" className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30">
                 PROVEN
               </Badge>
+              <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/30">
+                XAUUSD ONLY
+              </Badge>
             </div>
             <CardDescription className="text-slate-400">
-              XGBoost-based strategy with 75% win rate and 2.02 profit factor
+              XGBoost-based strategy trained exclusively on XAUUSD (Gold) - 75% win rate and 2.02 profit factor
             </CardDescription>
           </div>
         </div>
@@ -126,6 +129,10 @@ export function MLProfitableStrategyCard({ onClone }: MLProfitableStrategyCardPr
 
           <div className="space-y-2 text-sm">
             <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-blue-500" />
+              <span className="text-slate-400 font-semibold">Trained on: XAUUSD (Gold) Only</span>
+            </div>
+            <div className="flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-green-500" />
               <span className="text-slate-400">ML Model: XGBoost Classifier</span>
             </div>
@@ -170,7 +177,16 @@ export function MLProfitableStrategyCard({ onClone }: MLProfitableStrategyCardPr
           </div>
         </div>
 
-        {/* Warning */}
+        {/* Symbol Warning */}
+        <Alert className="bg-blue-500/10 border-blue-500/30">
+          <AlertCircle className="h-4 w-4 text-blue-500" />
+          <AlertDescription className="text-xs text-slate-300">
+            <strong>XAUUSD Only:</strong> This model is trained exclusively on Gold (XAUUSD) data.
+            Using it for other symbols (EURUSD, BTCUSD, etc.) will produce unreliable predictions.
+          </AlertDescription>
+        </Alert>
+
+        {/* Testing Warning */}
         <Alert className="bg-yellow-500/10 border-yellow-500/30">
           <AlertCircle className="h-4 w-4 text-yellow-500" />
           <AlertDescription className="text-xs text-slate-300">

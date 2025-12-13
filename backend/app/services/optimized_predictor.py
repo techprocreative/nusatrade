@@ -2,11 +2,16 @@
 Production-Ready ML Prediction Service
 Uses optimal configuration for profitable trading.
 
+⚠️  IMPORTANT: This predictor uses a model trained ONLY on XAUUSD data.
+    Using it with other symbols will produce unreliable predictions.
+
 This service:
 1. Loads optimal configuration
 2. Applies all filters (confidence, session, volatility, trend)
 3. Returns high-quality BUY/SELL/HOLD signals
 4. Includes TP/SL prices based on optimal ratio
+
+Supported Symbols: XAUUSD only
 """
 
 import pickle
@@ -21,7 +26,15 @@ from improved_features import ImprovedFeatureEngineer
 
 
 class OptimizedTradingPredictor:
-    """Production-ready predictor with optimal filters."""
+    """
+    Production-ready predictor with optimal filters.
+
+    ⚠️  SYMBOL RESTRICTION: This predictor uses a model trained exclusively
+        on XAUUSD (Gold) data. Do not use for other symbols.
+    """
+
+    # Supported symbols (XAUUSD only for current model)
+    SUPPORTED_SYMBOLS = ["XAUUSD"]
 
     def __init__(
         self,
@@ -30,7 +43,8 @@ class OptimizedTradingPredictor:
         tp_sl_ratio: float = 2.0,
         use_session_filter: bool = True,
         use_volatility_filter: bool = True,
-        use_trend_filter: bool = True
+        use_trend_filter: bool = True,
+        symbol: str = "XAUUSD"  # Add symbol parameter
     ):
         """
         Initialize predictor with optimal configuration.
@@ -42,7 +56,20 @@ class OptimizedTradingPredictor:
             use_session_filter: Only trade London/NY sessions
             use_volatility_filter: Avoid extreme volatility
             use_trend_filter: Only trade with strong trend
+            symbol: Trading symbol (must be XAUUSD for current model)
+
+        Raises:
+            ValueError: If symbol is not supported
         """
+        # Validate symbol
+        if symbol not in self.SUPPORTED_SYMBOLS:
+            raise ValueError(
+                f"Unsupported symbol '{symbol}'. This predictor only supports {self.SUPPORTED_SYMBOLS}. "
+                f"The model is trained exclusively on XAUUSD data."
+            )
+
+        self.symbol = symbol
+
         # Load model
         with open(model_path, 'rb') as f:
             model_data = pickle.load(f)
@@ -66,6 +93,7 @@ class OptimizedTradingPredictor:
         self.engineer = ImprovedFeatureEngineer()
 
         print(f"✅ Optimized Predictor Loaded")
+        print(f"   Symbol: {symbol} (XAUUSD-only model)")
         print(f"   Confidence Threshold: {confidence_threshold:.0%}")
         print(f"   TP/SL Ratio: {tp_sl_ratio:.1f}:1")
         print(f"   Session Filter: {'ON' if use_session_filter else 'OFF'}")

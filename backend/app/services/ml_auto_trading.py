@@ -73,15 +73,16 @@ class MLAutoTradingService:
         Process a trading signal for auto-trading.
 
         Steps:
-        1. Load recent market data
-        2. Generate ML prediction
-        3. Validate against strategy rules
-        4. Execute trade if all checks pass
+        1. Validate symbol compatibility
+        2. Load recent market data
+        3. Generate ML prediction
+        4. Validate against strategy rules
+        5. Execute trade if all checks pass
 
         Args:
             db: Database session
             user_id: User ID
-            symbol: Trading symbol
+            symbol: Trading symbol (must be XAUUSD for current model)
 
         Returns:
             Result with prediction and execution status
@@ -94,6 +95,19 @@ class MLAutoTradingService:
             "signal": "HOLD",
             "reason": None,
         }
+
+        # Validate symbol before proceeding
+        from app.strategies.ml_profitable_strategy import MLProfitableStrategy
+
+        if not MLProfitableStrategy.is_symbol_supported(symbol):
+            supported = MLProfitableStrategy.get_supported_symbols()
+            result["reason"] = (
+                f"Symbol '{symbol}' is not supported by this ML model. "
+                f"Supported symbols: {supported}. "
+                f"The current model is trained exclusively on XAUUSD data."
+            )
+            logger.warning(result["reason"])
+            return result
 
         # Initialize predictor
         await self.initialize_predictor()

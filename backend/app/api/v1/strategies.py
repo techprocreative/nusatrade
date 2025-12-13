@@ -526,6 +526,18 @@ def clone_ml_profitable_strategy(
     # Create new strategy from template
     strategy_data = create_default_ml_strategy(str(current_user.id))
 
+    # Ensure symbol is locked to XAUUSD
+    if "config" not in strategy_data:
+        strategy_data["config"] = {}
+    strategy_data["config"]["symbol"] = "XAUUSD"
+    strategy_data["config"]["supported_symbols"] = ["XAUUSD"]
+
+    # Add symbol restriction to description
+    description = strategy_data.get("description", "")
+    if "XAUUSD" not in description:
+        description += " (XAUUSD Only - trained exclusively on Gold data)"
+        strategy_data["description"] = description
+
     strategy = Strategy(
         id=uuid4(),
         user_id=current_user.id,
