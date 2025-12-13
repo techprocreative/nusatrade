@@ -29,11 +29,13 @@ export function MLProfitableEURUSDCard({ onClone }: MLProfitableEURUSDCardProps)
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
   // Fetch default model for EURUSD
   const { data: defaultModel } = useQuery({
     queryKey: ["default-model", "EURUSD"],
     queryFn: async () => {
-      const res = await fetch("/api/v1/ml-models/defaults/EURUSD", {
+      const res = await fetch(`${API_BASE_URL}/api/v1/ml-models/defaults/EURUSD`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
       });
       if (!res.ok) return null;
@@ -45,7 +47,7 @@ export function MLProfitableEURUSDCard({ onClone }: MLProfitableEURUSDCardProps)
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/v1/strategies/templates/ml-profitable-eurusd/clone', {
+      const response = await fetch(`${API_BASE_URL}/api/v1/strategies/templates/ml-profitable-eurusd/clone`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

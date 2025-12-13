@@ -30,11 +30,13 @@ export function MLProfitableStrategyCard({ onClone }: MLProfitableStrategyCardPr
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
   // Fetch default model for XAUUSD
   const { data: defaultModel } = useQuery({
     queryKey: ["default-model", "XAUUSD"],
     queryFn: async () => {
-      const res = await fetch("/api/v1/ml-models/defaults/XAUUSD", {
+      const res = await fetch(`${API_BASE_URL}/api/v1/ml-models/defaults/XAUUSD`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
       });
       if (!res.ok) return null;
@@ -46,7 +48,7 @@ export function MLProfitableStrategyCard({ onClone }: MLProfitableStrategyCardPr
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/v1/strategies/templates/ml-profitable/clone', {
+      const response = await fetch(`${API_BASE_URL}/api/v1/strategies/templates/ml-profitable/clone`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
