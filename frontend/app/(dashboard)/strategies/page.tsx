@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useStrategies } from "@/hooks/api/useStrategies";
 import { StrategyBuilder, StrategyPreview, StrategyCard } from "@/components/strategies";
 import { MLProfitableStrategyCard } from "@/components/strategies/MLProfitableStrategyCard";
+import { MLProfitableEURUSDCard } from "@/components/strategies/MLProfitableEURUSDCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -98,26 +99,19 @@ export default function StrategiesPage() {
         {/* Templates Tab */}
         <TabsContent value="templates" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* ML Profitable Strategy Template */}
+            {/* ML Profitable Strategy Template - XAUUSD */}
             <MLProfitableStrategyCard onClone={() => {
               setActiveTab("library");
               // Refresh strategies list
               window.location.reload();
             }} />
 
-            {/* Placeholder for future templates */}
-            <Card className="border-dashed border-slate-700 bg-slate-800/30">
-              <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                <Star className="w-12 h-12 text-slate-600 mb-4" />
-                <h3 className="font-medium text-slate-400 mb-2">
-                  More Templates Coming Soon
-                </h3>
-                <p className="text-sm text-slate-500 max-w-sm">
-                  We&apos;re working on more proven strategy templates.
-                  Check back later for updates!
-                </p>
-              </CardContent>
-            </Card>
+            {/* ML Profitable Strategy Template - EURUSD */}
+            <MLProfitableEURUSDCard onClone={() => {
+              setActiveTab("library");
+              // Refresh strategies list
+              window.location.reload();
+            }} />
           </div>
         </TabsContent>
 
