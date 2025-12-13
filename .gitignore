@@ -23,8 +23,11 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
-# Ignore large data files
+# Ignore large data files (CSV too big for GitHub)
 ohlcv/**/*.csv
-models/*.pkl
-backend/models/*.pkl
 *.csv
+
+# Ignore old models (keep only profitable XGBoost)
+models/model_gradient_boosting_*.pkl
+models/model_improved_gradient_boosting_*.pkl
+backend/models/*.pkl
