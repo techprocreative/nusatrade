@@ -51,6 +51,10 @@ else
     exit 1
 fi
 
+# Seed default models (safe to run multiple times)
+echo "🌱 Seeding default models..."
+python3 scripts/seed_default_models.py || echo "⚠️  Seeding had warnings (non-fatal)"
+
 # Start the application
 echo "🎯 Starting Uvicorn server..."
 exec uvicorn app.main:app \
