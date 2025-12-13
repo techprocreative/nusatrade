@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Select,
   SelectContent,
@@ -16,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { BacktestResult, BacktestTrade, BacktestSession } from "@/types";
-import { Play, History, TrendingUp, TrendingDown, Calendar, Clock } from "lucide-react";
+import { Play, History, TrendingUp, TrendingDown, Calendar, Clock, AlertTriangle } from "lucide-react";
 
 function MetricCard({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
@@ -213,6 +214,30 @@ export default function BacktestPage() {
   const SYMBOLS = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "XAUUSD"];
   const TIMEFRAMES = ["M15", "M30", "H1", "H4", "D1"];
 
+  // Check for strategy-symbol compatibility
+  const getSelectedStrategy = () => {
+    return allStrategies.find((s: any) => s.id === config.strategy);
+  };
+
+  const checkSymbolCompatibility = () => {
+    const strategy = getSelectedStrategy();
+    if (!strategy) return { compatible: true, warning: null };
+
+    // Check for ML Profitable Strategy (XAUUSD only)
+    if (strategy.name?.includes("ML Profitable") || strategy.name?.includes("XGBoost")) {
+      if (config.symbol !== "XAUUSD") {
+        return {
+          compatible: false,
+          warning: "ML Profitable Strategy is trained exclusively for XAUUSD. Results for other symbols will be unreliable."
+        };
+      }
+    }
+
+    return { compatible: true, warning: null };
+  };
+
+  const compatibility = checkSymbolCompatibility();
+
   const handleRunBacktest = async () => {
     setBacktestResult(null);
     const response = await runBacktestMutation.mutateAsync({
@@ -391,6 +416,16 @@ export default function BacktestPage() {
               </Button>
             </CardContent>
           </Card>
+
+          {/* Symbol Compatibility Warning */}
+          {!compatibility.compatible && compatibility.warning && (
+            <Alert className="bg-yellow-500/10 border-yellow-500/30">
+              <AlertTriangle className="h-4 w-4 text-yellow-500" />
+              <AlertDescription className="text-sm text-slate-300">
+                <strong>Symbol Compatibility Warning:</strong> {compatibility.warning}
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Current Results */}
           {backtestResult && (backtestResult.total_trades || backtestResult.net_profit !== undefined) && (

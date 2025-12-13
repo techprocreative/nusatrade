@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useWebSocketConnection, useTradeNotifications } from "@/hooks/useWebSocket";
+import { useQuery } from "@tanstack/react-query";
 import { wsClient } from "@/lib/websocket";
 import {
   LayoutDashboard,
@@ -51,6 +52,19 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { isConnected } = useWebSocketConnection();
+
+  // Fetch auto-trading status
+  const { data: autoTradingStatus } = useQuery({
+    queryKey: ["auto-trading-status"],
+    queryFn: async () => {
+      const res = await fetch("/api/v1/ml/auto-trading/status", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+      });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
 
   // Setup WebSocket connection and notifications
   useTradeNotifications();
@@ -120,6 +134,27 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             )}
           </div>
         </div>
+
+        {/* Auto-Trading Status */}
+        {autoTradingStatus && autoTradingStatus.scheduler_running && autoTradingStatus.active_models > 0 && (
+          <div className="px-4 py-2 border-b border-slate-800">
+            <Link href="/bots" className="block">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-blue-500/10 border border-blue-500/20 hover:bg-blue-500/20 transition-colors">
+                <div className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                </div>
+                <div className="flex-1">
+                  <span className="text-blue-400 font-medium">Auto-Trading Active</span>
+                  <p className="text-slate-500 text-[10px] mt-0.5">
+                    {autoTradingStatus.active_models} model{autoTradingStatus.active_models > 1 ? 's' : ''} running
+                  </p>
+                </div>
+                <ChevronRight className="w-3 h-3 text-blue-400" />
+              </div>
+            </Link>
+          </div>
+        )}
 
         {/* Navigation */}
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">

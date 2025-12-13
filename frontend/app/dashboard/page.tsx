@@ -226,7 +226,7 @@ export default function DashboardPage() {
       {/* Quick Actions */}
       <div>
         <h2 className="text-lg font-semibold text-white mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <QuickActionCard
             href="/trading"
             icon={LineChart}
@@ -237,9 +237,16 @@ export default function DashboardPage() {
           <QuickActionCard
             href="/bots"
             icon={Bot}
-            title="ML Bots"
-            description="Manage and train trading bots"
+            title="ML Models"
+            description="Create and train trading models"
             gradient="bg-gradient-to-br from-emerald-500 to-emerald-600"
+          />
+          <QuickActionCard
+            href="/models"
+            icon={BarChart3}
+            title="Model Defaults"
+            description="Configure default models per symbol"
+            gradient="bg-gradient-to-br from-yellow-500 to-orange-600"
           />
           <QuickActionCard
             href="/backtest"
