@@ -33,7 +33,7 @@ class ModelCreateRequest(BaseModel):
 
 class ModelResponse(BaseModel):
     model_config = {"protected_namespaces": (), "from_attributes": True}
-    
+
     id: str
     name: str
     model_type: str
@@ -42,6 +42,7 @@ class ModelResponse(BaseModel):
     strategy_id: Optional[str] = None
     strategy_name: Optional[str] = None
     is_active: bool
+    is_pretrained: bool = False
     performance_metrics: Optional[dict]
     training_status: str = "idle"
     training_error: Optional[str] = None
@@ -623,6 +624,107 @@ def deactivate_model(
     db.commit()
 
     return {"id": str(model_uuid), "status": "inactive"}
+
+
+@router.post("/models/import-default/{symbol}", response_model=ModelResponse, status_code=status.HTTP_201_CREATED)
+def import_default_model(
+    symbol: str,
+    db: Session = Depends(deps.get_db),
+    current_user=Depends(deps.get_current_user),
+):
+    """
+    Import a default pre-trained model for a symbol.
+
+    This creates a new MLModel record that links to the system's default profitable model.
+    The model is ready to use immediately without training.
+    """
+    from app.services.default_model_service import get_default_model_service
+    from app.models.ml import DefaultMLModel
+    from app.core.logging import get_logger
+
+    logger = get_logger(__name__)
+
+    # Validate symbol
+    symbol = symbol.upper()
+    if symbol not in ["XAUUSD", "EURUSD", "BTCUSD"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid symbol. Supported: XAUUSD, EURUSD, BTCUSD"
+        )
+
+    # Check if user already imported this default model
+    existing = db.query(MLModel).filter(
+        MLModel.user_id == current_user.id,
+        MLModel.symbol == symbol,
+        MLModel.is_pretrained == True
+    ).first()
+
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"You already imported the default {symbol} model"
+        )
+
+    # Get default model for symbol
+    service = get_default_model_service()
+    default_model_data = service.get_default_model_for_symbol(db, symbol, user_id=None)
+
+    if not default_model_data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No default model configured for {symbol}"
+        )
+
+    # Get the DefaultMLModel record for FK
+    default_model_record = db.query(DefaultMLModel).filter(
+        DefaultMLModel.symbol == symbol,
+        DefaultMLModel.is_system_default == True
+    ).first()
+
+    # Create MLModel that links to default model
+    new_model = MLModel(
+        id=uuid4(),
+        user_id=current_user.id,
+        name=f"{symbol} Profitable Model (System)",
+        symbol=symbol,
+        model_type="xgboost",
+        timeframe="H1",
+        file_path=default_model_data['model_path'],
+        is_pretrained=True,
+        default_model_id=default_model_record.id if default_model_record else None,
+        is_active=False,
+        training_status="completed",  # Pre-trained, no training needed
+        training_completed_at=datetime.utcnow(),
+        performance_metrics={
+            "win_rate": default_model_data.get('win_rate'),
+            "profit_factor": default_model_data.get('profit_factor'),
+            "accuracy": default_model_data.get('accuracy'),
+            "total_trades": default_model_data.get('total_trades'),
+        }
+    )
+
+    db.add(new_model)
+    db.commit()
+    db.refresh(new_model)
+
+    logger.info(f"User {current_user.id} imported default {symbol} model")
+
+    return ModelResponse(
+        id=str(new_model.id),
+        name=new_model.name,
+        model_type=new_model.model_type,
+        symbol=new_model.symbol,
+        timeframe=new_model.timeframe,
+        strategy_id=None,
+        strategy_name=None,
+        is_active=new_model.is_active,
+        performance_metrics=new_model.performance_metrics,
+        training_status=new_model.training_status,
+        training_error=None,
+        training_started_at=None,
+        training_completed_at=new_model.training_completed_at,
+        created_at=new_model.created_at,
+    )
 
 
 @router.post("/models/{model_id}/execute")

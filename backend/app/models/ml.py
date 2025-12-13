@@ -22,6 +22,9 @@ class MLModel(Base):
     performance_metrics = Column(JSON)
     file_path = Column(String(500))
     is_active = Column(Boolean, default=False)
+    # Pre-trained model flag (for imported default models)
+    is_pretrained = Column(Boolean, default=False)
+    default_model_id = Column(UUID(as_uuid=True), ForeignKey("default_ml_models.id"), nullable=True)
     # Training status fields
     training_status = Column(String(20), default="idle")  # idle, training, completed, failed
     training_error = Column(String(500), nullable=True)

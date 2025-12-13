@@ -335,3 +335,53 @@ export function useTriggerAutoTrading() {
     },
   });
 }
+
+// Fetch available default models
+export interface DefaultModel {
+  symbol: string;
+  model_path: string;
+  model_id: string;
+  win_rate?: number;
+  profit_factor?: number;
+  accuracy?: number;
+  total_trades?: number;
+  is_user_override: boolean;
+}
+
+export function useDefaultModels() {
+  return useQuery<Record<string, DefaultModel>>({
+    queryKey: ['default-models'],
+    queryFn: async () => {
+      const response = await apiClient.get('/api/v1/ml-models/defaults');
+      return response.data;
+    },
+  });
+}
+
+// Import default model
+export function useImportDefaultModel() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (symbol: string) => {
+      const response = await apiClient.post(`/api/v1/ml/models/import-default/${symbol}`);
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['ml-models'] });
+      queryClient.invalidateQueries({ queryKey: ['default-models'] });
+      toast({
+        title: 'Model Imported',
+        description: `${data.symbol} profitable model has been added to your bots`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: 'destructive',
+        title: 'Import Failed',
+        description: getErrorMessage(error),
+      });
+    },
+  });
+}

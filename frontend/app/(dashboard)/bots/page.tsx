@@ -12,6 +12,8 @@ import {
   useStrategies,
   useAutoTradingStatus,
   useTriggerAutoTrading,
+  useDefaultModels,
+  useImportDefaultModel,
 } from "@/hooks/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,7 +37,7 @@ import {
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { MLModel, MLPrediction, TrainingStatus } from "@/types";
-import { TrendingUp, TrendingDown, Zap, Brain, Target, Loader2, CheckCircle, XCircle, Clock, Play, RefreshCw } from "lucide-react";
+import { TrendingUp, TrendingDown, Zap, Brain, Target, Loader2, CheckCircle, XCircle, Clock, Play, RefreshCw, Star, Download } from "lucide-react";
 
 function StatCard({ label, value, icon, color }: {
   label: string;
@@ -259,6 +261,7 @@ export default function BotsPage() {
   const { data: models = [], isLoading } = useMLModels();
   const { data: strategies = [] } = useStrategies();
   const { data: autoTradingStatus } = useAutoTradingStatus();
+  const { data: defaultModels = {} } = useDefaultModels();
   const createModelMutation = useCreateMLModel();
   const toggleModelMutation = useToggleMLModel();
   const trainModelMutation = useTrainMLModel();
@@ -266,6 +269,7 @@ export default function BotsPage() {
   const getPredictionMutation = useGetPrediction();
   const executePredictionMutation = useExecutePrediction();
   const triggerAutoTradingMutation = useTriggerAutoTrading();
+  const importDefaultMutation = useImportDefaultModel();
 
   const handleCreateModel = async () => {
     await createModelMutation.mutateAsync({
@@ -367,6 +371,109 @@ export default function BotsPage() {
         <StatCard label="With Strategy" value={models.filter(m => m.strategy_id).length.toString()} icon="📋" />
       </div>
 
+      {/* Pre-trained Profitable Models */}
+      {Object.keys(defaultModels).length > 0 && (
+        <Card className="border-yellow-500/30 bg-gradient-to-r from-yellow-500/10 to-transparent">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Star className="w-5 h-5 text-yellow-500" />
+              Profitable Pre-trained Models
+            </CardTitle>
+            <p className="text-sm text-slate-400">
+              Import proven models with high win rates - ready to use without training
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {Object.entries(defaultModels).map(([symbol, model]) => {
+                const alreadyImported = models.some(
+                  (m) => m.symbol === symbol && m.is_pretrained
+                );
+
+                return (
+                  <Card key={symbol} className="bg-slate-800/50 border-slate-700">
+                    <CardContent className="pt-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <h3 className="font-semibold text-white flex items-center gap-2">
+                            {symbol}
+                            <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/30">
+                              System
+                            </Badge>
+                          </h3>
+                          <p className="text-xs text-slate-500 mt-1">XGBoost Model</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 mb-4">
+                        {model.win_rate && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-slate-400">Win Rate</span>
+                            <span className="font-semibold text-green-400">
+                              {model.win_rate.toFixed(1)}%
+                            </span>
+                          </div>
+                        )}
+                        {model.profit_factor && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-slate-400">Profit Factor</span>
+                            <span className="font-semibold text-green-400">
+                              {model.profit_factor.toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+                        {model.accuracy && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-slate-400">Accuracy</span>
+                            <span className="font-semibold text-blue-400">
+                              {model.accuracy.toFixed(1)}%
+                            </span>
+                          </div>
+                        )}
+                        {model.total_trades && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-slate-400">Total Trades</span>
+                            <span className="font-semibold text-slate-300">
+                              {model.total_trades.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {alreadyImported ? (
+                        <Badge className="w-full justify-center bg-green-500/20 text-green-400 border-green-500/30">
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Already in Your Bots
+                        </Badge>
+                      ) : (
+                        <Button
+                          onClick={() => importDefaultMutation.mutate(symbol)}
+                          disabled={importDefaultMutation.isPending}
+                          className="w-full"
+                          variant="outline"
+                        >
+                          {importDefaultMutation.isPending ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Importing...
+                            </>
+                          ) : (
+                            <>
+                              <Download className="w-4 h-4 mr-2" />
+                              Import to My Bots
+                            </>
+                          )}
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Auto-Trading Status */}
       {autoTradingStatus && (
         <Card className="border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 to-transparent">
@@ -454,7 +561,15 @@ export default function BotsPage() {
                               }`}
                           />
                           <div>
-                            <h3 className="font-medium">{model.name}</h3>
+                            <h3 className="font-medium flex items-center gap-2">
+                              {model.name}
+                              {model.is_pretrained && (
+                                <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/30 text-xs">
+                                  <Star className="w-3 h-3 mr-1" />
+                                  System
+                                </Badge>
+                              )}
+                            </h3>
                             <p className="text-sm text-muted-foreground">
                               {model.model_type.replace("_", " ").toUpperCase()} • {model.symbol} • {model.timeframe}
                               {model.strategy_name && (
@@ -501,13 +616,16 @@ export default function BotsPage() {
                                 e.stopPropagation();
                                 handleTrain(model.id);
                               }}
-                              disabled={trainModelMutation.isPending || model.training_status === "training"}
+                              disabled={trainModelMutation.isPending || model.training_status === "training" || model.is_pretrained}
+                              title={model.is_pretrained ? "Pre-trained models cannot be retrained" : undefined}
                             >
                               {model.training_status === "training" ? (
                                 <>
                                   <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                                   Training...
                                 </>
+                              ) : model.is_pretrained ? (
+                                "Pre-trained"
                               ) : (
                                 "Train"
                               )}

@@ -116,6 +116,7 @@ export interface MLModel {
   strategy_id?: string;
   strategy_name?: string;
   is_active: boolean;
+  is_pretrained?: boolean;
   performance_metrics: {
     accuracy?: number;
     precision?: number;
@@ -125,6 +126,9 @@ export interface MLModel {
     test_samples?: number;
     feature_count?: number;
     top_features?: Record<string, number>;
+    win_rate?: number;
+    profit_factor?: number;
+    total_trades?: number;
   } | null;
   training_status: TrainingStatus;
   training_error?: string;
