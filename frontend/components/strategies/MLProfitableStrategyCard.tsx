@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,9 +16,12 @@ import {
   Copy,
   ChevronRight,
   Bot,
-  Activity
+  Activity,
+  Star,
+  Settings
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import Link from "next/link";
 
 interface MLProfitableStrategyCardProps {
   onClone?: () => void;
@@ -26,6 +30,18 @@ interface MLProfitableStrategyCardProps {
 export function MLProfitableStrategyCard({ onClone }: MLProfitableStrategyCardProps) {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+
+  // Fetch default model for XAUUSD
+  const { data: defaultModel } = useQuery({
+    queryKey: ["default-model", "XAUUSD"],
+    queryFn: async () => {
+      const res = await fetch("/api/v1/ml-models/defaults/XAUUSD", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+      });
+      if (!res.ok) return null;
+      return res.json();
+    }
+  });
 
   const handleClone = async () => {
     setIsLoading(true);
@@ -80,6 +96,18 @@ export function MLProfitableStrategyCard({ onClone }: MLProfitableStrategyCardPr
               <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/30">
                 XAUUSD ONLY
               </Badge>
+              {defaultModel && (
+                <Badge
+                  variant="outline"
+                  className={defaultModel.is_user_override
+                    ? "bg-purple-500/10 text-purple-400 border-purple-500/30"
+                    : "bg-green-500/10 text-green-400 border-green-500/30"
+                  }
+                >
+                  <Star className="w-3 h-3 mr-1" />
+                  {defaultModel.is_user_override ? "Your Default" : "System Default"}
+                </Badge>
+              )}
             </div>
             <CardDescription className="text-slate-400">
               XGBoost-based strategy trained exclusively on XAUUSD (Gold) - 75% win rate and 2.02 profit factor
@@ -183,6 +211,9 @@ export function MLProfitableStrategyCard({ onClone }: MLProfitableStrategyCardPr
           <AlertDescription className="text-xs text-slate-300">
             <strong>XAUUSD Only:</strong> This model is trained exclusively on Gold (XAUUSD) data.
             Using it for other symbols (EURUSD, BTCUSD, etc.) will produce unreliable predictions.
+            <Link href="/models" className="block mt-1 text-blue-400 hover:text-blue-300 underline">
+              → Manage default models for all symbols
+            </Link>
           </AlertDescription>
         </Alert>
 

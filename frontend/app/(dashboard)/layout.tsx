@@ -25,7 +25,8 @@ import {
   WifiOff,
   ChevronRight,
   ShieldCheck,
-  Sparkles
+  Sparkles,
+  BarChart3
 } from "lucide-react";
 
 const navItems = [
@@ -33,7 +34,8 @@ const navItems = [
   { href: "/trading", label: "Trading", icon: LineChart },
   { href: "/strategies", label: "Strategies", icon: Sparkles },
   { href: "/backtest", label: "Backtest", icon: TestTube2 },
-  { href: "/bots", label: "ML Bots", icon: Bot },
+  { href: "/bots", label: "ML Models", icon: Bot },
+  { href: "/models", label: "Model Defaults", icon: BarChart3 },
   { href: "/ai-supervisor", label: "AI Supervisor", icon: Brain },
   { href: "/connections", label: "Connections", icon: Link2 },
   { href: "/security", label: "Security", icon: Shield },

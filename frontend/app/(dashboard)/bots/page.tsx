@@ -340,10 +340,10 @@ export default function BotsPage() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Brain className="w-6 h-6" />
-            ML Trading Bots
+            ML Models
           </h1>
           <p className="text-muted-foreground mt-1">
-            Manage and train machine learning models for automated trading
+            Create, train, and manage machine learning models for automated trading
           </p>
         </div>
         <Button onClick={() => setShowCreateModal(true)}>+ Create Model</Button>
