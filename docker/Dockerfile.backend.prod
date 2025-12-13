@@ -44,6 +44,7 @@ COPY --from=builder /root/.local /root/.local
 COPY backend/app ./app
 COPY backend/alembic.ini .
 COPY backend/migrations ./migrations
+COPY backend/scripts ./scripts
 
 # Make sure scripts are in PATH
 ENV PATH=/root/.local/bin:$PATH
@@ -51,8 +52,10 @@ ENV PATH=/root/.local/bin:$PATH
 # Set Python to run in unbuffered mode
 ENV PYTHONUNBUFFERED=1
 
-# Create directory for ML models
-RUN mkdir -p /app/models && chown -R appuser:appuser /app
+# Create directory for ML models and make scripts executable
+RUN mkdir -p /app/models && \
+    chmod +x /app/scripts/*.sh && \
+    chown -R appuser:appuser /app
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
@@ -64,11 +67,5 @@ USER appuser
 # Expose port
 EXPOSE 8000
 
-# Run with Uvicorn (production ASGI server)
-CMD ["uvicorn", "app.main:app", \
-     "--host", "0.0.0.0", \
-     "--port", "8000", \
-     "--workers", "4", \
-     "--log-level", "info", \
-     "--proxy-headers", \
-     "--forwarded-allow-ips", "*"]
+# Run with startup script (includes migrations)
+CMD ["/app/scripts/start-production.sh"]
