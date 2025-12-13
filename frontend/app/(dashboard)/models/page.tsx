@@ -56,11 +56,13 @@ export default function ModelsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
   // Fetch models for selected symbol
   const { data: symbolData, isLoading } = useQuery({
     queryKey: ["models", selectedSymbol],
     queryFn: async () => {
-      const res = await fetch(`/api/v1/ml-models/models/${selectedSymbol}`, {
+      const res = await fetch(`${API_BASE_URL}/api/v1/ml-models/models/${selectedSymbol}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
       });
       if (!res.ok) throw new Error("Failed to fetch models");
@@ -71,7 +73,7 @@ export default function ModelsPage() {
   // Set user default mutation
   const setDefaultMutation = useMutation({
     mutationFn: async ({ symbol, model }: { symbol: string; model: Model }) => {
-      const res = await fetch(`/api/v1/ml-models/defaults/${symbol}`, {
+      const res = await fetch(`${API_BASE_URL}/api/v1/ml-models/defaults/${symbol}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -97,7 +99,7 @@ export default function ModelsPage() {
   // Reset to system default mutation
   const resetDefaultMutation = useMutation({
     mutationFn: async (symbol: string) => {
-      const res = await fetch(`/api/v1/ml-models/defaults/${symbol}`, {
+      const res = await fetch(`${API_BASE_URL}/api/v1/ml-models/defaults/${symbol}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
       });
