@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Separator } from "@/components/ui/separator";
 import {
   Sparkles,
   TrendingUp,
@@ -149,8 +148,6 @@ export function MLProfitableStrategyCard({ onClone }: MLProfitableStrategyCardPr
           </div>
         </div>
 
-        <Separator className="bg-slate-700/50" />
-
         {/* Configuration Details */}
         <div className="space-y-3">
           <h4 className="text-sm font-semibold text-slate-300">Strategy Configuration:</h4>
@@ -182,8 +179,6 @@ export function MLProfitableStrategyCard({ onClone }: MLProfitableStrategyCardPr
             </div>
           </div>
         </div>
-
-        <Separator className="bg-slate-700/50" />
 
         {/* Expected Performance */}
         <div className="space-y-3">

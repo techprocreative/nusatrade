@@ -113,7 +113,7 @@ export default function StrategiesPage() {
                   More Templates Coming Soon
                 </h3>
                 <p className="text-sm text-slate-500 max-w-sm">
-                  We're working on more proven strategy templates.
+                  We&apos;re working on more proven strategy templates.
                   Check back later for updates!
                 </p>
               </CardContent>
