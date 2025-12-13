@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStrategies } from "@/hooks/api/useStrategies";
 import { StrategyBuilder, StrategyPreview, StrategyCard } from "@/components/strategies";
+import { MLProfitableStrategyCard } from "@/components/strategies/MLProfitableStrategyCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -15,6 +16,7 @@ import {
   Bot,
   Plus,
   FolderOpen,
+  Star,
 } from "lucide-react";
 
 export default function StrategiesPage() {
@@ -79,6 +81,10 @@ export default function StrategiesPage() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="bg-slate-800 border border-slate-700">
+          <TabsTrigger value="templates" className="flex items-center gap-2">
+            <Star className="w-4 h-4" />
+            Templates
+          </TabsTrigger>
           <TabsTrigger value="builder" className="flex items-center gap-2">
             <Sparkles className="w-4 h-4" />
             AI Builder
@@ -88,6 +94,32 @@ export default function StrategiesPage() {
             My Strategies ({strategies.length})
           </TabsTrigger>
         </TabsList>
+
+        {/* Templates Tab */}
+        <TabsContent value="templates" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* ML Profitable Strategy Template */}
+            <MLProfitableStrategyCard onClone={() => {
+              setActiveTab("library");
+              // Refresh strategies list
+              window.location.reload();
+            }} />
+
+            {/* Placeholder for future templates */}
+            <Card className="border-dashed border-slate-700 bg-slate-800/30">
+              <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                <Star className="w-12 h-12 text-slate-600 mb-4" />
+                <h3 className="font-medium text-slate-400 mb-2">
+                  More Templates Coming Soon
+                </h3>
+                <p className="text-sm text-slate-500 max-w-sm">
+                  We're working on more proven strategy templates.
+                  Check back later for updates!
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
 
         {/* AI Builder Tab */}
         <TabsContent value="builder" className="space-y-6">

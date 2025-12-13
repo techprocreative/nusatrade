@@ -461,3 +461,92 @@ def validate_strategy(
         "valid": len(errors) == 0,
         "errors": errors,
     }
+
+
+@router.get("/templates/ml-profitable", response_model=StrategyResponse)
+def get_ml_profitable_template(
+    db: Session = Depends(deps.get_db),
+    current_user=Depends(deps.get_current_user),
+):
+    """
+    Get the ML Profitable Strategy template.
+
+    This returns the proven profitable ML strategy configuration
+    that can be cloned/customized by users.
+    """
+    from app.strategies.ml_profitable_strategy import create_default_ml_strategy
+
+    # Create template (not saved to DB yet)
+    strategy_data = create_default_ml_strategy(str(current_user.id))
+
+    # Return as StrategyResponse format
+    return StrategyResponse(
+        id="template",  # Special ID to indicate this is a template
+        name=strategy_data["name"],
+        description=strategy_data["description"],
+        strategy_type=strategy_data["strategy_type"],
+        code=strategy_data.get("code"),
+        parameters=strategy_data.get("parameters", []),
+        indicators=strategy_data.get("indicators", []),
+        entry_rules=strategy_data.get("entry_rules", []),
+        exit_rules=strategy_data.get("exit_rules", []),
+        risk_management=strategy_data.get("risk_management"),
+        is_active=False,
+        backtest_results=None,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+
+
+@router.post("/templates/ml-profitable/clone", response_model=StrategyResponse, status_code=status.HTTP_201_CREATED)
+def clone_ml_profitable_strategy(
+    db: Session = Depends(deps.get_db),
+    current_user=Depends(deps.get_current_user),
+):
+    """
+    Clone the ML Profitable Strategy template to user's strategies.
+
+    Creates a new strategy based on the profitable ML configuration.
+    User can customize it after creation.
+    """
+    from app.strategies.ml_profitable_strategy import create_default_ml_strategy
+
+    # Check if user already has this strategy
+    existing = db.query(Strategy).filter(
+        Strategy.user_id == current_user.id,
+        Strategy.name == "ML Profitable Strategy (XGBoost)",
+    ).first()
+
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail="You already have this strategy. Please edit the existing one or delete it first."
+        )
+
+    # Create new strategy from template
+    strategy_data = create_default_ml_strategy(str(current_user.id))
+
+    strategy = Strategy(
+        id=uuid4(),
+        user_id=current_user.id,
+        name=strategy_data["name"],
+        description=strategy_data["description"],
+        strategy_type=strategy_data["strategy_type"],
+        code=strategy_data.get("code"),
+        parameters=strategy_data.get("parameters", []),
+        indicators=strategy_data.get("indicators", []),
+        entry_rules=strategy_data.get("entry_rules", []),
+        exit_rules=strategy_data.get("exit_rules", []),
+        risk_management=strategy_data.get("risk_management"),
+        config=strategy_data.get("config"),
+        is_active=False,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+
+    db.add(strategy)
+    db.commit()
+    db.refresh(strategy)
+
+    logger.info(f"ML Profitable Strategy cloned for user {current_user.id}: {strategy.id}")
+    return strategy_to_response(strategy)
