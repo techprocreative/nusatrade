@@ -78,6 +78,8 @@ class StrategyCreateRequest(BaseModel):
     name: str
     description: Optional[str] = None
     strategy_type: str = "custom"  # ai_generated, custom, preset
+    symbol: Optional[str] = None  # Trading symbol (EURUSD, GBPUSD, etc)
+    timeframe: Optional[str] = None  # Timeframe (M15, H1, H4, D1, etc)
     code: Optional[str] = None
     parameters: Optional[List[StrategyParameter]] = None
     indicators: Optional[List[str]] = None
@@ -89,6 +91,8 @@ class StrategyCreateRequest(BaseModel):
 class StrategyUpdateRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    symbol: Optional[str] = None
+    timeframe: Optional[str] = None
     code: Optional[str] = None
     parameters: Optional[List[StrategyParameter]] = None
     indicators: Optional[List[str]] = None
@@ -99,11 +103,13 @@ class StrategyUpdateRequest(BaseModel):
 
 class StrategyResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: str
     name: str
     description: Optional[str] = None
     strategy_type: str
+    symbol: Optional[str] = None
+    timeframe: Optional[str] = None
     code: Optional[str] = None
     parameters: List[StrategyParameter] = []
     indicators: List[str] = []
@@ -133,6 +139,8 @@ def strategy_to_response(s: Strategy) -> StrategyResponse:
         name=s.name,
         description=s.description,
         strategy_type=s.strategy_type or "custom",
+        symbol=s.symbol,
+        timeframe=s.timeframe,
         code=s.code,
         parameters=s.parameters or [],
         indicators=s.indicators or [],
@@ -174,6 +182,8 @@ def create_strategy(
         name=request.name,
         description=request.description,
         strategy_type=request.strategy_type,
+        symbol=request.symbol,
+        timeframe=request.timeframe,
         code=request.code,
         parameters=[p.model_dump() for p in request.parameters] if request.parameters else [],
         indicators=request.indicators or [],
@@ -231,6 +241,10 @@ def update_strategy(
         strategy.name = request.name
     if request.description is not None:
         strategy.description = request.description
+    if request.symbol is not None:
+        strategy.symbol = request.symbol
+    if request.timeframe is not None:
+        strategy.timeframe = request.timeframe
     if request.code is not None:
         strategy.code = request.code
     if request.parameters is not None:

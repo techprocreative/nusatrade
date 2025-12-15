@@ -15,6 +15,8 @@ class Strategy(Base):
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     strategy_type = Column(String(50), nullable=True)  # ai_generated, custom, preset
+    symbol = Column(String(20), nullable=True)  # Trading symbol (EURUSD, GBPUSD, etc)
+    timeframe = Column(String(10), nullable=True)  # Timeframe (M15, H1, H4, D1, etc)
     
     # Strategy logic
     code = Column(Text, nullable=True)  # Generated strategy code
