@@ -562,3 +562,85 @@ def clone_ml_profitable_strategy(
 
     logger.info(f"ML Profitable Strategy cloned for user {current_user.id}: {strategy.id}")
     return strategy_to_response(strategy)
+
+
+# ============================================
+# Strategy Templates Endpoints
+# ============================================
+
+@router.get("/templates")
+def list_strategy_templates(
+    current_user=Depends(deps.get_current_user),
+):
+    """List all available strategy templates."""
+    from app.services.strategy_templates import list_templates
+    
+    templates = list_templates()
+    return {
+        "count": len(templates),
+        "templates": templates
+    }
+
+
+@router.post("/from-template", response_model=StrategyResponse, status_code=status.HTTP_201_CREATED)
+def create_strategy_from_template(
+    template_name: str,
+    symbol: str,
+    custom_name: Optional[str] = None,
+    db: Session = Depends(deps.get_db),
+    current_user=Depends(deps.get_current_user),
+):
+    """Create a new strategy from a template.
+    
+    Templates available: conservative, balanced, aggressive, scalping
+    """
+    from app.services.strategy_templates import get_template
+    from app.core.validators import validate_symbol
+    
+    # Validate symbol
+    symbol = validate_symbol(symbol)
+    
+    # Get template
+    template = get_template(template_name)
+    if not template:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Template '{template_name}' not found. Available: conservative, balanced, aggressive, scalping"
+        )
+    
+    # Create strategy name
+    strategy_name = custom_name or f"{symbol} {template['name_suffix']}"
+    
+    # Check if user already has a strategy with this name
+    existing = db.query(Strategy).filter(
+        Strategy.user_id == current_user.id,
+        Strategy.name == strategy_name
+    ).first()
+    
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Strategy with name '{strategy_name}' already exists"
+        )
+    
+    # Create strategy
+    strategy = Strategy(
+        id=uuid4(),
+        user_id=current_user.id,
+        name=strategy_name,
+        description=template["description"],
+        symbol=symbol,
+        timeframe="H1",  # Default timeframe
+        strategy_type="ml_auto",
+        config=template["config"],
+        is_active=True,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+    
+    db.add(strategy)
+    db.commit()
+    db.refresh(strategy)
+    
+    logger.info(f"Created strategy from template '{template_name}': {strategy.id}")
+    return strategy_to_response(strategy)
