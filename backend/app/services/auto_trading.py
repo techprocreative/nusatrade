@@ -82,19 +82,33 @@ class AutoTradingService:
             "trades_executed": 0,
             "errors": [],
         }
-        
+
         db: Session = SessionLocal()
-        
+
         try:
-            # Get all active models with trained file_path
+            # Get all active models with trained file_path AND linked strategy
             active_models = db.query(MLModel).filter(
                 MLModel.is_active == True,
                 MLModel.file_path != None,
+                MLModel.strategy_id != None,  # CRITICAL: Only models with strategy
             ).all()
-            
+
             results["models_checked"] = len(active_models)
-            logger.info(f"Auto-trading: Checking {len(active_models)} active models")
-            
+            logger.info(f"Auto-trading: Checking {len(active_models)} active models with strategies")
+
+            # Warn about models without strategy
+            models_without_strategy = db.query(MLModel).filter(
+                MLModel.is_active == True,
+                MLModel.file_path != None,
+                MLModel.strategy_id == None,
+            ).count()
+
+            if models_without_strategy > 0:
+                logger.warning(
+                    f"⚠️  {models_without_strategy} active model(s) skipped: no strategy linked. "
+                    "Please link a strategy to enable auto-trading."
+                )
+
             for model in active_models:
                 try:
                     trade_result = await self._process_model(db, model)

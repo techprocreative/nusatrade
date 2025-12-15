@@ -572,7 +572,11 @@ def activate_model(
     db: Session = Depends(deps.get_db),
     current_user=Depends(deps.get_current_user),
 ):
-    """Activate a model for live trading signals."""
+    """Activate a model for live trading signals.
+
+    IMPORTANT: Model must be linked to a strategy before activation.
+    This ensures risk management and trading rules are properly configured.
+    """
     # Validate UUID format
     model_uuid = validate_uuid(model_id, "model_id")
 
@@ -590,6 +594,25 @@ def activate_model(
             detail="Cannot activate untrained model",
         )
 
+    # CRITICAL: Require strategy to be linked
+    if not model.strategy_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Model must be linked to a strategy before activation. Please select or create a strategy first.",
+        )
+
+    # Verify strategy exists and belongs to user
+    strategy = db.query(Strategy).filter(
+        Strategy.id == model.strategy_id,
+        Strategy.user_id == current_user.id,
+    ).first()
+
+    if not strategy:
+        raise HTTPException(
+            status_code=400,
+            detail="Strategy not found or does not belong to user. Please select a valid strategy.",
+        )
+
     # Deactivate other models first
     db.query(MLModel).filter(
         MLModel.user_id == current_user.id,
@@ -599,7 +622,15 @@ def activate_model(
     model.is_active = True
     db.commit()
 
-    return {"id": str(model_uuid), "status": "active", "message": "Model activated for live trading"}
+    logger.info(f"Model {model.name} activated with strategy {strategy.name}")
+
+    return {
+        "id": str(model_uuid),
+        "status": "active",
+        "strategy_id": str(model.strategy_id),
+        "strategy_name": strategy.name,
+        "message": "Model activated for live trading with strategy"
+    }
 
 
 @router.post("/models/{model_id}/deactivate")
@@ -624,6 +655,64 @@ def deactivate_model(
     db.commit()
 
     return {"id": str(model_uuid), "status": "inactive"}
+
+
+@router.post("/models/{model_id}/link-strategy")
+def link_model_to_strategy(
+    model_id: str,
+    strategy_id: str,
+    db: Session = Depends(deps.get_db),
+    current_user=Depends(deps.get_current_user),
+):
+    """Link a model to a strategy for auto-trading.
+
+    This must be done before activating the model. The strategy defines:
+    - Risk management settings (lot size, max loss, etc.)
+    - Entry/exit rules
+    - Position management
+    - Trading hours and filters
+    """
+    # Validate UUIDs
+    model_uuid = validate_uuid(model_id, "model_id")
+    strategy_uuid = validate_uuid(strategy_id, "strategy_id")
+
+    # Get model
+    model = db.query(MLModel).filter(
+        MLModel.id == model_uuid,
+        MLModel.user_id == current_user.id,
+    ).first()
+
+    if not model:
+        raise HTTPException(status_code=404, detail="Model not found")
+
+    # Get strategy
+    strategy = db.query(Strategy).filter(
+        Strategy.id == strategy_uuid,
+        Strategy.user_id == current_user.id,
+    ).first()
+
+    if not strategy:
+        raise HTTPException(status_code=404, detail="Strategy not found")
+
+    # Validate symbol compatibility
+    if model.symbol != strategy.symbol:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Symbol mismatch: Model uses {model.symbol} but strategy uses {strategy.symbol}"
+        )
+
+    # Link model to strategy
+    model.strategy_id = strategy.id
+    db.commit()
+
+    logger.info(f"Linked model {model.name} to strategy {strategy.name}")
+
+    return {
+        "id": str(model.id),
+        "strategy_id": str(strategy.id),
+        "strategy_name": strategy.name,
+        "message": f"Model successfully linked to strategy '{strategy.name}'"
+    }
 
 
 @router.post("/models/import-default/{symbol}", response_model=ModelResponse, status_code=status.HTTP_201_CREATED)
@@ -919,6 +1008,45 @@ async def trigger_auto_trading(
     }
 
 
+@router.get("/strategies/for-model/{symbol}")
+def get_strategies_for_symbol(
+    symbol: str,
+    db: Session = Depends(deps.get_db),
+    current_user=Depends(deps.get_current_user),
+):
+    """Get available strategies for a specific symbol.
+
+    Returns strategies that can be linked to ML models for auto-trading.
+    Filters by symbol to ensure compatibility.
+    """
+    # Validate symbol
+    symbol = validate_symbol(symbol)
+
+    # Get user's strategies for this symbol
+    strategies = db.query(Strategy).filter(
+        Strategy.user_id == current_user.id,
+        Strategy.symbol == symbol,
+        Strategy.is_active == True,
+    ).all()
+
+    return {
+        "symbol": symbol,
+        "count": len(strategies),
+        "strategies": [
+            {
+                "id": str(s.id),
+                "name": s.name,
+                "description": s.description,
+                "strategy_type": s.strategy_type,
+                "timeframe": s.timeframe,
+                "config": s.config,
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+            }
+            for s in strategies
+        ]
+    }
+
+
 @router.get("/auto-trading/status")
 def get_auto_trading_status(
     db: Session = Depends(deps.get_db),
@@ -926,14 +1054,23 @@ def get_auto_trading_status(
 ):
     """Get auto-trading status and configuration."""
     from app.services.auto_trading import auto_trading_service
-    
-    # Get active models count
-    active_models = db.query(MLModel).filter(
+
+    # Get active models with strategy
+    active_models_with_strategy = db.query(MLModel).filter(
         MLModel.user_id == current_user.id,
         MLModel.is_active == True,
         MLModel.file_path != None,
+        MLModel.strategy_id != None,
     ).count()
-    
+
+    # Get active models WITHOUT strategy (warning)
+    active_models_without_strategy = db.query(MLModel).filter(
+        MLModel.user_id == current_user.id,
+        MLModel.is_active == True,
+        MLModel.file_path != None,
+        MLModel.strategy_id == None,
+    ).count()
+
     # Get today's auto trades
     from datetime import date
     today = date.today()
@@ -941,13 +1078,17 @@ def get_auto_trading_status(
         MLModel.user_id == current_user.id,
         MLPrediction.created_at >= datetime.combine(today, datetime.min.time()),
     ).count()
-    
+
     return {
         "scheduler_running": True,  # Will be True when app is running
         "interval_minutes": 15,
-        "active_models": active_models,
+        "active_models_with_strategy": active_models_with_strategy,
+        "active_models_without_strategy": active_models_without_strategy,
         "predictions_today": today_trades,
         "last_run": auto_trading_service._last_run.isoformat() if auto_trading_service._last_run else None,
+        "warnings": [
+            f"{active_models_without_strategy} model(s) need strategy assignment"
+        ] if active_models_without_strategy > 0 else [],
         "config": {
             "default_confidence_threshold": 0.70,
             "default_max_trades_per_day": 5,
