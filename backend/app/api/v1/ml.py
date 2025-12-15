@@ -1026,9 +1026,11 @@ def get_strategies_for_symbol(
     # Include strategies with matching symbol OR null symbol (universal strategies)
     strategies = db.query(Strategy).filter(
         Strategy.user_id == current_user.id,
-        (Strategy.symbol == symbol) | (Strategy.symbol == None),
+        (Strategy.symbol == symbol) | (Strategy.symbol.is_(None)),
         Strategy.is_active == True,
     ).all()
+
+    logger.info(f"Found {len(strategies)} strategies for user {current_user.id} with symbol={symbol} (including NULL)")
 
     return {
         "symbol": symbol,
