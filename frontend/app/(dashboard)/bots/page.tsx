@@ -38,6 +38,7 @@ import {
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { MLModel, MLPrediction, TrainingStatus } from "@/types";
 import { TrendingUp, TrendingDown, Zap, Brain, Target, Loader2, CheckCircle, XCircle, Clock, Play, RefreshCw, Star, Download } from "lucide-react";
+import { StrategySelector } from "@/components/ml-trading/StrategySelector";
 
 function StatCard({ label, value, icon, color }: {
   label: string;
@@ -249,6 +250,7 @@ export default function BotsPage() {
   const [deleteModelId, setDeleteModelId] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<MLModel | null>(null);
   const [currentPrediction, setCurrentPrediction] = useState<MLPrediction | null>(null);
+  const [justImportedModel, setJustImportedModel] = useState<MLModel | null>(null);
   const [newModel, setNewModel] = useState({
     name: "",
     model_type: "random_forest",
@@ -270,6 +272,17 @@ export default function BotsPage() {
   const executePredictionMutation = useExecutePrediction();
   const triggerAutoTradingMutation = useTriggerAutoTrading();
   const importDefaultMutation = useImportDefaultModel();
+
+  // Override import mutation onSuccess to auto-open strategy selector
+  const handleImportModel = async (symbol: string) => {
+    try {
+      const importedModel = await importDefaultMutation.mutateAsync(symbol);
+      // Auto-open strategy selector for the newly imported model
+      setJustImportedModel(importedModel);
+    } catch (error) {
+      // Error already handled by mutation's onError
+    }
+  };
 
   const handleCreateModel = async () => {
     await createModelMutation.mutateAsync({
@@ -447,7 +460,7 @@ export default function BotsPage() {
                         </Badge>
                       ) : (
                         <Button
-                          onClick={() => importDefaultMutation.mutate(symbol)}
+                          onClick={() => handleImportModel(symbol)}
                           disabled={importDefaultMutation.isPending}
                           className="w-full"
                           variant="outline"
@@ -824,6 +837,16 @@ export default function BotsPage() {
         onConfirm={handleDelete}
         isLoading={deleteModelMutation.isPending}
       />
+
+      {/* Auto-open strategy selector for newly imported model */}
+      {justImportedModel && (
+        <StrategySelector
+          model={justImportedModel}
+          open={true}
+          onClose={() => setJustImportedModel(null)}
+          onSuccess={() => setJustImportedModel(null)}
+        />
+      )}
     </div>
   );
 }

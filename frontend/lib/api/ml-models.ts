@@ -126,3 +126,16 @@ export async function createStrategyFromTemplate(
   }
   return res.json();
 }
+
+// Import default model for symbol
+export async function importDefaultModel(symbol: string, token: string): Promise<MLModel> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/ml/models/import-default/${symbol}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.detail || 'Failed to import default model');
+  }
+  return res.json();
+}
