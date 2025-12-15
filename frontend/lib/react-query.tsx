@@ -10,7 +10,14 @@ export function ReactQueryProvider({ children }: { children: React.ReactNode }) 
         defaultOptions: {
           queries: {
             staleTime: 60 * 1000, // 1 minute
-            retry: 1,
+            retry: (failureCount, error: any) => {
+              // Don't retry on rate limits (429)
+              if (error?.response?.status === 429) return false;
+              // Don't retry on client errors (4xx except 429)
+              if (error?.response?.status >= 400 && error?.response?.status < 500) return false;
+              // Retry server errors (5xx) once
+              return failureCount < 1;
+            },
             refetchOnWindowFocus: false,
           },
         },

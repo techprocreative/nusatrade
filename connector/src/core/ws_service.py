@@ -136,11 +136,13 @@ class WebSocketService:
         """Establish WebSocket connection."""
         self._set_state(ConnectionState.CONNECTING)
 
-        # Build URL with token
+        # Use URL as-is if token already in URL, otherwise add it
         connect_url = self.url
-        if self.token:
+        if self.token and "token=" not in self.url:
             separator = "&" if "?" in self.url else "?"
             connect_url = f"{self.url}{separator}token={self.token}"
+
+        logger.info(f"Connecting to: {connect_url}")
 
         # SSL context for wss://
         ssl_context = None

@@ -102,8 +102,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if os.environ.get("TESTING") == "1":
             return await call_next(request)
         
-        # Skip rate limiting for health check
-        if request.url.path in ["/health", "/docs", "/openapi.json"]:
+        # Skip rate limiting for health check endpoints and docs
+        # Use endswith to catch both /health and /api/v1/health
+        if (request.url.path.endswith("/health") or
+            request.url.path in ["/docs", "/openapi.json", "/redoc", "/favicon.ico"]):
             return await call_next(request)
 
         client_key = self._get_client_key(request)

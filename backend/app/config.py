@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     r2_bucket_name: str = "forex-ai-storage"
 
     # Rate Limiting
-    rate_limit_requests: int = 100
+    rate_limit_requests: int = 300
     rate_limit_window_seconds: int = 60
 
     # Trading Defaults

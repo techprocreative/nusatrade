@@ -377,10 +377,21 @@ class MainWindow(QMainWindow):
                     self.detected_account.setText(str(account_info.login))
                     self.detected_server.setText(account_info.server)
                     self.detected_group.show()
-                    
+
                     self._log(f"Detected: {account_info.company} - {account_info.login}", "INFO")
-                    self._register_broker_connection(account_info)
-                
+
+                    # Register connection and verify success
+                    if not self._register_broker_connection(account_info):
+                        self._log("❌ Failed to register broker connection", "ERROR")
+                        self._log("Please re-login and try again", "ERROR")
+                        self.mt5_status.setText("MT5: 🔴 Registration Failed")
+                        self.mt5_status.setStyleSheet("color: #e74c3c; font-weight: bold;")
+                        self.connect_btn.setEnabled(True)
+                        self.connect_btn.setText("Connect")
+                        return
+
+                    self._log(f"✅ Connection ID: {self.current_connection_id}", "INFO")
+
                 self._update_account_info()
                 self.account_timer.start()
             else:
@@ -403,20 +414,20 @@ class MainWindow(QMainWindow):
             if self.auth and self.auth.is_authenticated():
                 ws_url = self.auth.get_ws_url()
                 ws_token = self.auth.get_access_token()
-                
-                if self.current_connection_id:
-                    ws_url = f"{ws_url}?token={ws_token}&connection_id={self.current_connection_id}"
-                else:
-                    ws_url = f"{ws_url}?token={ws_token}"
-                
+
+                # Build URL with connection_id first, then token
+                # connection_id is guaranteed to exist (validated above)
+                ws_url = f"{ws_url}?connection_id={self.current_connection_id}&token={ws_token}"
+
                 self._log(f"Connecting to server...", "INFO")
             else:
                 self._log("Not authenticated", "ERROR")
                 return
 
+            # Pass complete URL, don't pass token separately to avoid duplication
             self.ws = WebSocketService(
                 url=ws_url,
-                token=ws_token,
+                token=None,  # Token already in URL
                 heartbeat_interval=self.config.heartbeat_interval,
             )
 
@@ -441,52 +452,67 @@ class MainWindow(QMainWindow):
         self.connect_btn.setText("Connected")
         self.disconnect_btn.setEnabled(True)
 
-    def _register_broker_connection(self, account_info):
-        """Register broker connection in backend."""
+    def _register_broker_connection(self, account_info) -> bool:
+        """Register broker connection in backend. Returns True if successful."""
         if not self.auth or not self.auth.is_authenticated():
-            return
-            
+            self._log("Not authenticated - cannot register connection", "ERROR")
+            return False
+
         try:
             import requests
-            
+
             server_url = self.auth.server_url
             token = self.auth.get_access_token()
             headers = {"Authorization": f"Bearer {token}"}
-            
+
+            # Try to find existing connection
             resp = requests.get(
                 f"{server_url}/api/v1/brokers/connections",
                 headers=headers,
                 timeout=10
             )
-            
-            if resp.status_code == 200:
-                connections = resp.json()
-                
-                for conn in connections:
-                    if (conn.get("account_number") == str(account_info.login) and
-                        conn.get("server") == account_info.server):
-                        self.current_connection_id = conn["id"]
-                        self._log(f"Using existing connection", "INFO")
-                        return
-                
-                resp = requests.post(
-                    f"{server_url}/api/v1/brokers/connections",
-                    headers=headers,
-                    json={
-                        "broker_name": account_info.company,
-                        "account_number": str(account_info.login),
-                        "server": account_info.server,
-                    },
-                    timeout=10
-                )
-                
-                if resp.status_code == 201:
-                    data = resp.json()
-                    self.current_connection_id = data["id"]
-                    self._log(f"Registered new connection", "INFO")
-                    
+
+            if resp.status_code == 401:
+                self._log("Token expired - please re-login", "ERROR")
+                return False
+            elif resp.status_code != 200:
+                self._log(f"Failed to fetch connections: {resp.status_code}", "ERROR")
+                return False
+
+            connections = resp.json()
+
+            # Check for existing connection
+            for conn in connections:
+                if (conn.get("account_number") == str(account_info.login) and
+                    conn.get("server") == account_info.server):
+                    self.current_connection_id = conn["id"]
+                    self._log(f"Using existing connection: {conn['id']}", "INFO")
+                    return True
+
+            # Create new connection
+            resp = requests.post(
+                f"{server_url}/api/v1/brokers/connections",
+                headers=headers,
+                json={
+                    "broker_name": account_info.company,
+                    "account_number": str(account_info.login),
+                    "server": account_info.server,
+                },
+                timeout=10
+            )
+
+            if resp.status_code == 201:
+                data = resp.json()
+                self.current_connection_id = data["id"]
+                self._log(f"Registered new connection: {data['id']}", "INFO")
+                return True
+            else:
+                self._log(f"Failed to register connection: {resp.status_code}", "ERROR")
+                return False
+
         except Exception as e:
-            self._log(f"Connection registration error: {e}", "WARNING")
+            self._log(f"Connection registration error: {e}", "ERROR")
+            return False
 
     def _disconnect(self):
         """Disconnect from all services."""

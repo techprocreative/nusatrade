@@ -59,9 +59,10 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      interval: 60s
+      timeout: 5s
+      retries: 2
+      start_period: 40s
     networks:
       - forexai-network
 
