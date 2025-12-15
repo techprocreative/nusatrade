@@ -73,13 +73,18 @@ class MarketDataFetcher:
                 progress=False,
                 auto_adjust=True,
             )
-            
+
             if data.empty:
                 logger.warning(f"No data returned for {ticker}")
                 return None
-            
+
+            # Handle MultiIndex columns (yfinance can return tuples)
+            if isinstance(data.columns, pd.MultiIndex):
+                # Flatten MultiIndex to single level
+                data.columns = data.columns.get_level_values(0)
+
             # Rename columns to lowercase
-            data.columns = [c.lower() for c in data.columns]
+            data.columns = [c.lower() if isinstance(c, str) else str(c).lower() for c in data.columns]
             data = data.reset_index()
             
             # Handle timezone-aware datetime
@@ -116,7 +121,19 @@ class MarketDataFetcher:
         try:
             data = yf.download(ticker, period="1d", interval="1m", progress=False)
             if not data.empty:
-                return float(data['Close'].iloc[-1])
+                # Handle MultiIndex columns
+                if isinstance(data.columns, pd.MultiIndex):
+                    data.columns = data.columns.get_level_values(0)
+
+                # Get Close column (case-insensitive)
+                close_col = None
+                for col in data.columns:
+                    if str(col).lower() == 'close':
+                        close_col = col
+                        break
+
+                if close_col is not None:
+                    return float(data[close_col].iloc[-1])
         except Exception as e:
             logger.error(f"Failed to get current price for {symbol}: {e}")
         
