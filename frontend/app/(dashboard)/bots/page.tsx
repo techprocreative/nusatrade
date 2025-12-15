@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -383,6 +384,17 @@ export default function BotsPage() {
         />
         <StatCard label="With Strategy" value={models.filter(m => m.strategy_id).length.toString()} icon="📋" />
       </div>
+
+      {/* Warning for models without strategy */}
+      {models.filter(m => m.is_active && !m.strategy_id).length > 0 && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {models.filter(m => m.is_active && !m.strategy_id).length} active model(s) need strategy assignment.
+            Link strategies to enable auto-trading. Models without strategy will be skipped by auto-trading.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Pre-trained Profitable Models */}
       {Object.keys(defaultModels).length > 0 && (
