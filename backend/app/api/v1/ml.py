@@ -1022,15 +1022,28 @@ def get_strategies_for_symbol(
     # Validate symbol
     symbol = validate_symbol(symbol)
 
+    # Debug: Check total strategies for user (no filters)
+    total_strategies = db.query(Strategy).filter(
+        Strategy.user_id == current_user.id,
+    ).count()
+
+    logger.info(f"User {current_user.id} has {total_strategies} total strategies in database")
+
     # Get user's strategies for this symbol
     # Include strategies with matching symbol OR null symbol (universal strategies)
+    # Temporarily include inactive strategies for debugging
     strategies = db.query(Strategy).filter(
         Strategy.user_id == current_user.id,
         (Strategy.symbol == symbol) | (Strategy.symbol.is_(None)),
-        Strategy.is_active == True,
+        # Strategy.is_active == True,  # Temporarily commented for debugging
     ).all()
 
-    logger.info(f"Found {len(strategies)} strategies for user {current_user.id} with symbol={symbol} (including NULL)")
+    active_count = sum(1 for s in strategies if s.is_active)
+    inactive_count = len(strategies) - active_count
+
+    logger.info(f"Found {len(strategies)} strategies for symbol={symbol} (active={active_count}, inactive={inactive_count})")
+    for s in strategies:
+        logger.info(f"  - Strategy: {s.name}, symbol={s.symbol}, is_active={s.is_active}")
 
     return {
         "symbol": symbol,
@@ -1041,7 +1054,9 @@ def get_strategies_for_symbol(
                 "name": s.name,
                 "description": s.description,
                 "strategy_type": s.strategy_type,
+                "symbol": s.symbol,  # Include symbol in response for debugging
                 "timeframe": s.timeframe,
+                "is_active": s.is_active,  # Include is_active in response for debugging
                 "config": s.config,
                 "created_at": s.created_at.isoformat() if s.created_at else None,
             }
