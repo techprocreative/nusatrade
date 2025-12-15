@@ -183,8 +183,8 @@ def dashboard_stats(
     total_realized_pnl = sum(float(t.profit or 0) for t in closed_trades) if closed_trades else 0.0
     
     # Try to get real balance from MT5 via connector
-    mt5_account = connection_manager.get_user_account_info(current_user.email)
-    
+    mt5_account = connection_manager.get_user_account_info(str(current_user.id))
+
     if mt5_account:
         # Use real MT5 account data
         current_balance = mt5_account["balance"]
