@@ -1023,9 +1023,10 @@ def get_strategies_for_symbol(
     symbol = validate_symbol(symbol)
 
     # Get user's strategies for this symbol
+    # Include strategies with matching symbol OR null symbol (universal strategies)
     strategies = db.query(Strategy).filter(
         Strategy.user_id == current_user.id,
-        Strategy.symbol == symbol,
+        (Strategy.symbol == symbol) | (Strategy.symbol == None),
         Strategy.is_active == True,
     ).all()
 
