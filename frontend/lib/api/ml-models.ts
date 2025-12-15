@@ -10,11 +10,21 @@ export interface MLModel {
   is_active: boolean;
   strategy_id: string | null;
   strategy_name?: string;
+  is_pretrained?: boolean;
   performance_metrics: {
     accuracy?: number;
+    precision?: number;
+    recall?: number;
+    f1_score?: number;
+    train_samples?: number;
+    test_samples?: number;
+    feature_count?: number;
+    top_features?: Record<string, number>;
     win_rate?: number;
     profit_factor?: number;
-  };
+    total_trades?: number;
+  } | null;
+  training_status?: 'idle' | 'training' | 'completed' | 'failed';
   created_at: string;
 }
 

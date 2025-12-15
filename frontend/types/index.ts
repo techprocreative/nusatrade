@@ -113,7 +113,8 @@ export interface MLModel {
   model_type: string;
   symbol: string;
   timeframe: string;
-  strategy_id?: string;
+  file_path: string | null;
+  strategy_id: string | null;
   strategy_name?: string;
   is_active: boolean;
   is_pretrained?: boolean;
