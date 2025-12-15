@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { MLModel, MLPrediction, TrainingStatus } from "@/types";
-import { TrendingUp, TrendingDown, Zap, Brain, Target, Loader2, CheckCircle, XCircle, Clock, Play, RefreshCw, Star, Download } from "lucide-react";
+import { TrendingUp, TrendingDown, Zap, Brain, Target, Loader2, CheckCircle, XCircle, Clock, Play, RefreshCw, Star, Download, AlertCircle } from "lucide-react";
 import { StrategySelector } from "@/components/ml-trading/StrategySelector";
 
 function StatCard({ label, value, icon, color }: {
