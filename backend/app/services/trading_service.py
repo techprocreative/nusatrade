@@ -1,6 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 import uuid
+import asyncio
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -286,20 +287,113 @@ async def close_order_with_mt5(
         order_uuid = uuid.UUID(str(order_id))
     except (ValueError, TypeError):
         return None, {"success": False, "error": "Invalid order ID"}
-    
+
     trade = db.query(Trade).filter(Trade.id == order_uuid, Trade.user_id == user_id).first()
     if not trade:
         return None, {"success": False, "error": "Order not found"}
-    
+
     connection_id = trade.connection_id
-    
+
     # Send close command to MT5 first
     mt5_result = await send_close_order_to_mt5(trade=trade, connection_id=connection_id)
-    
+
     # Then close in database
     closed_trade = close_order(db, user_id, order_id, close_price)
-    
+
     return closed_trade, mt5_result
+
+
+async def open_order_with_mt5_retry(
+    db: Session,
+    user_id: str,
+    *,
+    symbol: str,
+    order_type: str,
+    lot_size: float,
+    price: float,
+    stop_loss=None,
+    take_profit=None,
+    connection_id=None,
+    max_retries: int = 3,
+) -> tuple[Trade, dict]:
+    """
+    Open order with retry logic and exponential backoff.
+
+    Retries MT5 execution on temporary failures (connector offline, timeout, busy).
+    Uses exponential backoff: 2s, 5s, 10s between retries.
+
+    Args:
+        max_retries: Maximum number of retry attempts (default: 3)
+
+    Returns:
+        Tuple of (Trade, mt5_result dict)
+
+    Raises:
+        HTTPException: If all retry attempts fail
+    """
+    backoff_delays = [2, 5, 10]  # Exponential backoff in seconds
+    last_error = None
+
+    for attempt in range(max_retries):
+        try:
+            logger.info(
+                f"Trade execution attempt {attempt + 1}/{max_retries}: "
+                f"{order_type} {lot_size} lots {symbol}"
+            )
+
+            # Attempt to open order with MT5
+            trade, mt5_result = await open_order_with_mt5(
+                db, user_id,
+                symbol=symbol,
+                order_type=order_type,
+                lot_size=lot_size,
+                price=price,
+                stop_loss=stop_loss,
+                take_profit=take_profit,
+                connection_id=connection_id,
+            )
+
+            # Success!
+            logger.info(
+                f"✅ Trade executed successfully on attempt {attempt + 1}: "
+                f"{symbol} {order_type}, Request ID: {mt5_result.get('request_id', 'N/A')}"
+            )
+            return trade, mt5_result
+
+        except Exception as e:
+            last_error = e
+            error_msg = str(e)
+
+            # Check if error is retryable
+            is_retryable = any(keyword in error_msg.lower() for keyword in [
+                "connector is not online",
+                "timeout",
+                "connection",
+                "temporarily unavailable",
+                "busy",
+            ])
+
+            if not is_retryable or attempt >= max_retries - 1:
+                # Not retryable or last attempt - raise the error
+                logger.error(
+                    f"❌ Trade execution failed (attempt {attempt + 1}/{max_retries}): "
+                    f"{error_msg} - Not retrying"
+                )
+                raise
+
+            # Retryable error - wait and try again
+            delay = backoff_delays[min(attempt, len(backoff_delays) - 1)]
+            logger.warning(
+                f"⚠️ Trade execution failed (attempt {attempt + 1}/{max_retries}): "
+                f"{error_msg} - Retrying in {delay}s..."
+            )
+
+            await asyncio.sleep(delay)
+            continue
+
+    # All retries exhausted (shouldn't reach here due to raise above)
+    logger.error(f"❌ All {max_retries} trade execution attempts failed")
+    raise last_error
 
 
 def is_connector_online(connection_id: str) -> bool:

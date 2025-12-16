@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 from dataclasses import dataclass, asdict
+from threading import Lock
 
 import pandas as pd
 from sqlalchemy.orm import Session
@@ -62,12 +63,13 @@ class PredictionResult:
 
 class PredictionService:
     """Unified prediction service combining ML + Strategy validation."""
-    
+
     def __init__(self, db: Session):
         self.db = db
         self.rule_engine = StrategyRuleEngine()
         self.feature_engineer = FeatureEngineer()
         self._model_cache: Dict[str, Trainer] = {}
+        self._cache_lock = Lock()  # Thread-safe cache access
     
     def generate_prediction(
         self,
@@ -234,8 +236,8 @@ class PredictionService:
         model: MLModel,
         featured_data: pd.DataFrame
     ) -> Dict[str, Any]:
-        """Get prediction from trained ML model."""
-        
+        """Get prediction from trained ML model with thread-safe cache."""
+
         # Check if model is trained
         if not model.file_path or not os.path.exists(model.file_path):
             logger.warning(f"Model {model.name} not trained or file not found")
@@ -245,32 +247,34 @@ class PredictionService:
                 "generated_by": "fallback",
                 "probabilities": {}
             }
-        
-        # Load model (with caching)
+
+        # Load model (with thread-safe caching)
         model_id = str(model.id)
-        if model_id not in self._model_cache:
-            try:
-                trainer = Trainer()
-                trainer.load_model(model.file_path)
-                self._model_cache[model_id] = trainer
-                logger.info(f"Loaded ML model: {model.name}")
-            except Exception as e:
-                logger.error(f"Failed to load model {model.name}: {e}")
-                return {
-                    "direction": "HOLD",
-                    "confidence": 0.0,
-                    "generated_by": "fallback",
-                    "probabilities": {}
-                }
-        
-        trainer = self._model_cache[model_id]
-        
+
+        with self._cache_lock:
+            if model_id not in self._model_cache:
+                try:
+                    trainer = Trainer()
+                    trainer.load_model(model.file_path)
+                    self._model_cache[model_id] = trainer
+                    logger.info(f"Loaded ML model: {model.name}")
+                except Exception as e:
+                    logger.error(f"Failed to load model {model.name}: {e}")
+                    return {
+                        "direction": "HOLD",
+                        "confidence": 0.0,
+                        "generated_by": "fallback",
+                        "probabilities": {}
+                    }
+
+            trainer = self._model_cache[model_id]
+
         # Get last row for prediction
         last_row = featured_data.iloc[[-1]]
-        
+
         try:
             prediction_result = trainer.predict(last_row)
-            
+
             return {
                 "direction": prediction_result.get("direction", "HOLD"),
                 "confidence": prediction_result.get("confidence", 0.5),
@@ -387,5 +391,6 @@ class PredictionService:
         )
     
     def clear_model_cache(self):
-        """Clear the ML model cache."""
-        self._model_cache.clear()
+        """Clear the ML model cache (thread-safe)."""
+        with self._cache_lock:
+            self._model_cache.clear()

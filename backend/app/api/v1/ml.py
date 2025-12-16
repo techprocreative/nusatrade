@@ -770,7 +770,17 @@ def import_default_model(
         DefaultMLModel.is_system_default == True
     ).first()
 
-    # Create MLModel that links to default model
+    # Auto-link to default strategy if available
+    default_strategy = db.query(Strategy).filter(
+        Strategy.symbol == symbol,
+        Strategy.strategy_type == "preset",
+        Strategy.is_public == True,
+        Strategy.is_active == True
+    ).first()
+
+    strategy_id = default_strategy.id if default_strategy else None
+
+    # Create MLModel that links to default model AND default strategy
     new_model = MLModel(
         id=uuid4(),
         user_id=current_user.id,
@@ -781,6 +791,7 @@ def import_default_model(
         file_path=default_model_data['model_path'],
         is_pretrained=True,
         default_model_id=default_model_record.id if default_model_record else None,
+        strategy_id=strategy_id,  # Auto-linked to default strategy
         is_active=False,
         training_status="completed",  # Pre-trained, no training needed
         training_completed_at=datetime.utcnow(),
@@ -797,6 +808,8 @@ def import_default_model(
     db.refresh(new_model)
 
     logger.info(f"User {current_user.id} imported default {symbol} model")
+    if strategy_id:
+        logger.info(f"Auto-linked to default strategy: {default_strategy.name}")
 
     return ModelResponse(
         id=str(new_model.id),
@@ -804,8 +817,8 @@ def import_default_model(
         model_type=new_model.model_type,
         symbol=new_model.symbol,
         timeframe=new_model.timeframe,
-        strategy_id=None,
-        strategy_name=None,
+        strategy_id=str(strategy_id) if strategy_id else None,
+        strategy_name=default_strategy.name if default_strategy else None,
         is_active=new_model.is_active,
         performance_metrics=new_model.performance_metrics,
         training_status=new_model.training_status,
@@ -813,6 +826,7 @@ def import_default_model(
         training_started_at=None,
         training_completed_at=new_model.training_completed_at,
         created_at=new_model.created_at,
+        is_pretrained=True,  # Add this field
     )
 
 
@@ -1031,11 +1045,10 @@ def get_strategies_for_symbol(
 
     # Get user's strategies for this symbol
     # Include strategies with matching symbol OR null symbol (universal strategies)
-    # Temporarily include inactive strategies for debugging
     strategies = db.query(Strategy).filter(
         Strategy.user_id == current_user.id,
         (Strategy.symbol == symbol) | (Strategy.symbol.is_(None)),
-        # Strategy.is_active == True,  # Temporarily commented for debugging
+        Strategy.is_active == True,  # Only show active strategies
     ).all()
 
     active_count = sum(1 for s in strategies if s.is_active)

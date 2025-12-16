@@ -30,9 +30,9 @@ logger = get_logger(__name__)
 
 class AutoTradingConfig:
     """Configuration for auto-trading."""
-    
-    # Default settings
-    DEFAULT_CONFIDENCE_THRESHOLD = 0.65  # 65%
+
+    # Default settings - Synced with frontend
+    DEFAULT_CONFIDENCE_THRESHOLD = 0.70  # 70% (synced with frontend)
     DEFAULT_MAX_TRADES_PER_DAY = 5
     DEFAULT_COOLDOWN_MINUTES = 30
     DEFAULT_LOT_SIZE = 0.01
@@ -357,26 +357,107 @@ class AutoTradingService:
         prediction_data: Dict[str, Any],
         config: AutoTradingConfig,
     ) -> bool:
-        """Execute a real trade via MT5 connector."""
+        """Execute a real trade via MT5 connector with validation."""
         from app.services import trading_service
-        
+        from app.models.trade import Trade, Position
+        from app.models.user import User
+        from datetime import date, timedelta
+
         try:
             symbol = model.symbol or "EURUSD"
             direction = prediction_data["direction"]
             entry_price = prediction_data["entry_price"]
             stop_loss = prediction_data.get("stop_loss")
             take_profit = prediction_data.get("take_profit")
-            
-            # Find an active broker connection for this user
+
+            # Get user and their risk settings
+            user = db.query(User).filter(User.id == model.user_id).first()
+            user_settings = user.settings or {}
+            risk_settings = user_settings.get("risk_management", {})
+
+            # Get risk limits from user settings (with defaults)
+            max_daily_loss = risk_settings.get("max_daily_loss", -500.0)
+            max_positions = risk_settings.get("max_positions", 10)
+            max_lot_size = risk_settings.get("max_lot_size", 0.5)
+            risk_enabled = risk_settings.get("enabled", True)
+
+            # === CRITICAL VALIDATION CHECKS ===
+
+            if not risk_enabled:
+                logger.warning(f"Risk management disabled for user {model.user_id}")
+
+            # 1. Check daily loss limit
+            today = date.today()
+            today_start = datetime.combine(today, datetime.min.time())
+
+            daily_trades = db.query(Trade).filter(
+                Trade.user_id == model.user_id,
+                Trade.created_at >= today_start,
+                Trade.status == "closed"
+            ).all()
+
+            daily_pnl = sum(t.profit or 0 for t in daily_trades)
+
+            if daily_pnl < max_daily_loss:
+                logger.warning(
+                    f"Daily loss limit reached for user {model.user_id}: "
+                    f"${daily_pnl:.2f} < ${max_daily_loss:.2f}"
+                )
+                return False
+
+            # 2. Check max concurrent positions
+            open_positions = db.query(Position).filter(
+                Position.user_id == model.user_id,
+                Position.status == "open"
+            ).count()
+
+            if open_positions >= max_positions:
+                logger.warning(
+                    f"Max positions limit reached for user {model.user_id}: "
+                    f"{open_positions} >= {max_positions}"
+                )
+                return False
+
+            # 3. Verify symbol/timeframe match
+            if model.symbol and model.symbol != symbol:
+                logger.error(
+                    f"Symbol mismatch: Model={model.symbol}, Trade={symbol}"
+                )
+                return False
+
+            # 4. Validate lot size
+            if config.lot_size > max_lot_size:
+                logger.warning(
+                    f"Lot size {config.lot_size} exceeds max {max_lot_size}, "
+                    f"using {max_lot_size} instead"
+                )
+                config.lot_size = max_lot_size
+
+            # 5. Find an active broker connection
             connection = db.query(BrokerConnection).filter(
                 BrokerConnection.user_id == model.user_id,
                 BrokerConnection.is_active == True,
             ).first()
-            
-            connection_id = str(connection.id) if connection else None
-            
-            # Open trade using trading service
-            trade, mt5_result = await trading_service.open_order_with_mt5(
+
+            if not connection:
+                logger.error(f"No active MT5 connection for user {model.user_id}")
+                return False
+
+            connection_id = str(connection.id)
+
+            # === EXECUTE TRADE ===
+
+            logger.info(
+                f"Executing trade: {direction} {config.lot_size} lots {symbol} "
+                f"@ {entry_price} (SL: {stop_loss}, TP: {take_profit})"
+            )
+            logger.info(
+                f"Risk check: Daily P/L: ${daily_pnl:.2f}/{max_daily_loss:.2f}, "
+                f"Positions: {open_positions}/{max_positions}"
+            )
+
+            # Open trade using trading service WITH RETRY
+            trade, mt5_result = await trading_service.open_order_with_mt5_retry(
                 db,
                 model.user_id,
                 symbol=symbol,
@@ -386,22 +467,29 @@ class AutoTradingService:
                 stop_loss=stop_loss,
                 take_profit=take_profit,
                 connection_id=connection_id,
+                max_retries=3,  # 3 attempts with exponential backoff
             )
-            
+
             # Update trade with source and model reference
             trade.source = "auto_trading"
             trade.ml_model_id = model.id
             db.commit()
-            
+
             if mt5_result.get("success"):
-                logger.info(f"Trade executed via MT5: {direction} {symbol} @ {entry_price}")
+                logger.info(
+                    f"✅ Trade executed via MT5: {direction} {symbol} @ {entry_price}, "
+                    f"Ticket: {mt5_result.get('ticket', 'N/A')}"
+                )
+                return True
             else:
-                logger.warning(f"Trade saved but MT5 execution failed: {mt5_result.get('error', 'Unknown')}")
-            
-            return True
-            
+                logger.warning(
+                    f"⚠️ Trade saved but MT5 execution failed: "
+                    f"{mt5_result.get('error', 'Unknown')}"
+                )
+                return False
+
         except Exception as e:
-            logger.error(f"Failed to execute trade: {e}")
+            logger.error(f"❌ Failed to execute trade: {e}", exc_info=True)
             db.rollback()
             return False
 
