@@ -57,7 +57,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { data: autoTradingStatus } = useQuery({
     queryKey: ["auto-trading-status"],
     queryFn: async () => {
-      const res = await fetch("/api/v1/ml/auto-trading/status", {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const res = await fetch(`${API_BASE_URL}/api/v1/ml/auto-trading/status`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
       });
       if (!res.ok) return null;

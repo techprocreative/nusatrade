@@ -79,7 +79,8 @@ export default function SettingsPage() {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const response = await fetch("/api/v1/users/me", {
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        const response = await fetch(`${API_BASE_URL}/api/v1/users/me`, {
           headers: {
             "Authorization": `Bearer ${localStorage.getItem("access_token")}`
           }
