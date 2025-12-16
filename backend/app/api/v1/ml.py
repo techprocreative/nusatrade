@@ -660,10 +660,15 @@ def deactivate_model(
     return {"id": str(model_uuid), "status": "inactive"}
 
 
+class LinkStrategyRequest(BaseModel):
+    """Request to link a strategy to a model."""
+    strategy_id: str
+
+
 @router.post("/models/{model_id}/link-strategy")
 def link_model_to_strategy(
     model_id: str,
-    strategy_id: str,
+    request: LinkStrategyRequest,
     db: Session = Depends(deps.get_db),
     current_user=Depends(deps.get_current_user),
 ):
@@ -677,7 +682,7 @@ def link_model_to_strategy(
     """
     # Validate UUIDs
     model_uuid = validate_uuid(model_id, "model_id")
-    strategy_uuid = validate_uuid(strategy_id, "strategy_id")
+    strategy_uuid = validate_uuid(request.strategy_id, "strategy_id")
 
     # Get model
     model = db.query(MLModel).filter(
@@ -688,14 +693,19 @@ def link_model_to_strategy(
     if not model:
         raise HTTPException(status_code=404, detail="Model not found")
 
-    # Get strategy
+    # Get strategy (user's own OR public preset)
     strategy = db.query(Strategy).filter(
         Strategy.id == strategy_uuid,
-        Strategy.user_id == current_user.id,
+    ).filter(
+        (Strategy.user_id == current_user.id) | (Strategy.user_id.is_(None))
     ).first()
 
     if not strategy:
         raise HTTPException(status_code=404, detail="Strategy not found")
+
+    # Verify user can access this strategy (own strategy or public preset)
+    if strategy.user_id is not None and strategy.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied to this strategy")
 
     # Validate symbol compatibility
     if model.symbol != strategy.symbol:
