@@ -33,7 +33,11 @@ export interface Strategy {
   name: string;
   description: string;
   symbol: string;
+  strategy_type?: string;  // ai_generated, custom, preset
+  timeframe?: string;
+  is_active?: boolean;
   config: Record<string, any>;
+  created_at?: string;
 }
 
 export interface StrategyTemplate {
