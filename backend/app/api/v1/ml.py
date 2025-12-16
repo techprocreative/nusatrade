@@ -1036,27 +1036,28 @@ def get_strategies_for_symbol(
     # Validate symbol
     symbol = validate_symbol(symbol)
 
-    # Debug: Check total strategies for user (no filters)
-    total_strategies = db.query(Strategy).filter(
-        Strategy.user_id == current_user.id,
-    ).count()
-
-    logger.info(f"User {current_user.id} has {total_strategies} total strategies in database")
-
-    # Get user's strategies for this symbol
-    # Include strategies with matching symbol OR null symbol (universal strategies)
-    strategies = db.query(Strategy).filter(
+    # Get user's own strategies for this symbol
+    user_strategies = db.query(Strategy).filter(
         Strategy.user_id == current_user.id,
         (Strategy.symbol == symbol) | (Strategy.symbol.is_(None)),
         Strategy.is_active == True,  # Only show active strategies
     ).all()
 
-    active_count = sum(1 for s in strategies if s.is_active)
-    inactive_count = len(strategies) - active_count
+    # Get public preset templates for this symbol
+    public_strategies = db.query(Strategy).filter(
+        Strategy.user_id.is_(None),
+        Strategy.symbol == symbol,
+        Strategy.is_public == True,
+        Strategy.is_active == True,
+        Strategy.strategy_type == "preset",
+    ).all()
 
-    logger.info(f"Found {len(strategies)} strategies for symbol={symbol} (active={active_count}, inactive={inactive_count})")
+    # Combine both lists
+    strategies = user_strategies + public_strategies
+
+    logger.info(f"Found {len(user_strategies)} user strategies + {len(public_strategies)} public templates for symbol={symbol}")
     for s in strategies:
-        logger.info(f"  - Strategy: {s.name}, symbol={s.symbol}, is_active={s.is_active}")
+        logger.info(f"  - Strategy: {s.name}, symbol={s.symbol}, type={s.strategy_type}, is_active={s.is_active}")
 
     return {
         "symbol": symbol,
