@@ -4,8 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStrategies } from "@/hooks/api/useStrategies";
 import { StrategyBuilder, StrategyPreview, StrategyCard } from "@/components/strategies";
-import { MLProfitableStrategyCard } from "@/components/strategies/MLProfitableStrategyCard";
-import { MLProfitableEURUSDCard } from "@/components/strategies/MLProfitableEURUSDCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -51,6 +49,7 @@ export default function StrategiesPage() {
 
   const activeStrategies = strategies.filter((s) => s.is_active);
   const aiGeneratedStrategies = strategies.filter((s) => s.strategy_type === 'ai_generated');
+  const templateStrategies = strategies.filter((s) => s.strategy_type === 'preset');
 
   return (
     <div className="space-y-6 p-6">
@@ -98,21 +97,43 @@ export default function StrategiesPage() {
 
         {/* Templates Tab */}
         <TabsContent value="templates" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* ML Profitable Strategy Template - XAUUSD */}
-            <MLProfitableStrategyCard onClone={() => {
-              setActiveTab("library");
-              // Refresh strategies list
-              window.location.reload();
-            }} />
-
-            {/* ML Profitable Strategy Template - EURUSD */}
-            <MLProfitableEURUSDCard onClone={() => {
-              setActiveTab("library");
-              // Refresh strategies list
-              window.location.reload();
-            }} />
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-white mb-2">Strategy Templates</h2>
+            <p className="text-sm text-muted-foreground">
+              Pre-built, optimized strategies ready to use for different trading pairs
+            </p>
           </div>
+
+          {isLoading ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-64 bg-slate-800 animate-pulse rounded-lg" />
+              ))}
+            </div>
+          ) : templateStrategies.length > 0 ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {templateStrategies.map((strategy) => (
+                <StrategyCard
+                  key={strategy.id}
+                  strategy={strategy}
+                  onSelect={() => handleSelectStrategy(strategy)}
+                  onBacktest={() => handleBacktest(strategy)}
+                />
+              ))}
+            </div>
+          ) : (
+            <Card className="bg-slate-800/50 border-slate-700 border-dashed">
+              <CardContent className="text-center py-12">
+                <Star className="w-12 h-12 mx-auto text-slate-600 mb-4" />
+                <h3 className="font-medium text-slate-400 mb-2">
+                  No Templates Available
+                </h3>
+                <p className="text-sm text-slate-500 max-w-sm mx-auto">
+                  Strategy templates will appear here once they are created.
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* AI Builder Tab */}
