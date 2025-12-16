@@ -1,5 +1,6 @@
 """ML Models API - Training, Predictions, and Model Management."""
 
+import logging
 from datetime import datetime
 from typing import List, Optional
 from uuid import uuid4
@@ -14,6 +15,8 @@ from app.models.strategy import Strategy
 from app.ml.features import FeatureEngineer
 from app.ml.training import Trainer
 from app.core.validators import validate_uuid, validate_symbol, validate_date_range
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter()
