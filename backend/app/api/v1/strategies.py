@@ -134,6 +134,57 @@ class QuickBacktestRequest(BaseModel):
 
 def strategy_to_response(s: Strategy) -> StrategyResponse:
     """Convert Strategy model to response."""
+    # Transform parameters from dict to list of StrategyParameter
+    parameters_list = []
+    if s.parameters:
+        if isinstance(s.parameters, dict):
+            # Convert dict to list of StrategyParameter objects
+            for key, value in s.parameters.items():
+                parameters_list.append(
+                    StrategyParameter(
+                        name=key,
+                        type="number" if isinstance(value, (int, float)) else "string",
+                        default_value=value,
+                        description=f"Parameter: {key}",
+                    )
+                )
+        elif isinstance(s.parameters, list):
+            parameters_list = s.parameters
+
+    # Transform entry_rules to match StrategyRule schema
+    entry_rules_list = []
+    if s.entry_rules:
+        for idx, rule in enumerate(s.entry_rules):
+            if isinstance(rule, dict):
+                # Handle legacy format with transformation
+                entry_rules_list.append(
+                    StrategyRule(
+                        id=rule.get("id", f"entry_{idx}"),
+                        condition=rule.get("condition", rule.get("indicator", "unknown")),
+                        action=rule.get("action", rule.get("direction", "BUY")),
+                        description=rule.get("description", f"Entry rule {idx + 1}"),
+                    )
+                )
+            else:
+                entry_rules_list.append(rule)
+
+    # Transform exit_rules to match StrategyRule schema
+    exit_rules_list = []
+    if s.exit_rules:
+        for idx, rule in enumerate(s.exit_rules):
+            if isinstance(rule, dict):
+                # Handle legacy format with transformation
+                exit_rules_list.append(
+                    StrategyRule(
+                        id=rule.get("id", f"exit_{idx}"),
+                        condition=rule.get("condition", rule.get("indicator", "unknown")),
+                        action=rule.get("action", rule.get("direction", "SELL")),
+                        description=rule.get("description", f"Exit rule {idx + 1}"),
+                    )
+                )
+            else:
+                exit_rules_list.append(rule)
+
     return StrategyResponse(
         id=str(s.id),
         name=s.name,
@@ -142,10 +193,10 @@ def strategy_to_response(s: Strategy) -> StrategyResponse:
         symbol=s.symbol,
         timeframe=s.timeframe,
         code=s.code,
-        parameters=s.parameters or [],
+        parameters=parameters_list,
         indicators=s.indicators or [],
-        entry_rules=s.entry_rules or [],
-        exit_rules=s.exit_rules or [],
+        entry_rules=entry_rules_list,
+        exit_rules=exit_rules_list,
         risk_management=s.risk_management,
         is_active=s.is_active or False,
         backtest_results=s.backtest_results,
