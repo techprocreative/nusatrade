@@ -161,12 +161,25 @@ def list_strategies(
     db: Session = Depends(deps.get_db),
     current_user=Depends(deps.get_current_user),
 ):
-    """List all strategies for the current user."""
-    strategies = db.query(Strategy).filter(
+    """List all strategies for the current user + public preset templates."""
+    # Get user's own strategies
+    user_strategies = db.query(Strategy).filter(
         Strategy.user_id == current_user.id
-    ).order_by(Strategy.created_at.desc()).all()
+    ).all()
 
-    return [strategy_to_response(s) for s in strategies]
+    # Get public preset templates (user_id = NULL, is_public = True, is_active = True)
+    public_strategies = db.query(Strategy).filter(
+        Strategy.user_id.is_(None),
+        Strategy.is_public == True,
+        Strategy.is_active == True,
+        Strategy.strategy_type == "preset",
+    ).all()
+
+    # Combine and sort by created_at desc
+    all_strategies = user_strategies + public_strategies
+    all_strategies.sort(key=lambda s: s.created_at, reverse=True)
+
+    return [strategy_to_response(s) for s in all_strategies]
 
 
 @router.post("", response_model=StrategyResponse, status_code=status.HTTP_201_CREATED)
