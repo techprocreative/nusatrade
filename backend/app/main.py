@@ -37,31 +37,24 @@ async def lifespan(app: FastAPI):
     if settings.jwt_secret == "your-secret-key" or len(settings.jwt_secret) < 32:
         logger.warning("⚠️  JWT_SECRET not set or too short! Set a strong secret in production.")
     
-    # Setup auto-trading scheduler (temporarily disabled for debugging)
+    # Setup auto-trading scheduler
     scheduler = AsyncIOScheduler()
 
-    # TEMPORARY: Disable scheduler to diagnose deployment timeout
-    # TODO: Re-enable after fixing deployment issue
-    scheduler_enabled = False
+    try:
+        from app.services.auto_trading import run_auto_trading
 
-    if scheduler_enabled:
-        try:
-            from app.services.auto_trading import run_auto_trading
-
-            # Run auto-trading every 15 minutes
-            scheduler.add_job(
-                run_auto_trading,
-                trigger=IntervalTrigger(minutes=15),
-                id="auto_trading",
-                name="Auto Trading Scheduler",
-                replace_existing=True,
-            )
-            scheduler.start()
-            logger.info("✅ Auto-trading scheduler started (interval: 15 minutes)")
-        except Exception as e:
-            logger.warning(f"⚠️  Failed to start auto-trading scheduler: {e}")
-    else:
-        logger.info("⚠️  Auto-trading scheduler temporarily disabled for debugging")
+        # Run auto-trading every 15 minutes
+        scheduler.add_job(
+            run_auto_trading,
+            trigger=IntervalTrigger(minutes=15),
+            id="auto_trading",
+            name="Auto Trading Scheduler",
+            replace_existing=True,
+        )
+        scheduler.start()
+        logger.info("✅ Auto-trading scheduler started (interval: 15 minutes)")
+    except Exception as e:
+        logger.warning(f"⚠️  Failed to start auto-trading scheduler: {e}")
     
     yield
     
