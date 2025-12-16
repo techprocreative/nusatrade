@@ -604,16 +604,24 @@ def activate_model(
             detail="Model must be linked to a strategy before activation. Please select or create a strategy first.",
         )
 
-    # Verify strategy exists and belongs to user
+    # Verify strategy exists and is accessible (user's own OR public preset)
     strategy = db.query(Strategy).filter(
         Strategy.id == model.strategy_id,
-        Strategy.user_id == current_user.id,
+    ).filter(
+        (Strategy.user_id == current_user.id) | (Strategy.user_id.is_(None))
     ).first()
 
     if not strategy:
         raise HTTPException(
             status_code=400,
-            detail="Strategy not found or does not belong to user. Please select a valid strategy.",
+            detail="Strategy not found. Please select a valid strategy.",
+        )
+
+    # Verify user can access this strategy
+    if strategy.user_id is not None and strategy.user_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied to this strategy.",
         )
 
     # Deactivate other models first
