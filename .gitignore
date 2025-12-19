@@ -31,3 +31,4 @@ ohlcv/**/*.csv
 models/model_gradient_boosting_*.pkl
 models/model_improved_gradient_boosting_*.pkl
 backend/models/*.pkl
+!backend/models/model_realistic_xauusd_M15_20251219_100151.pkl
