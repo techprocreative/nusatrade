@@ -69,11 +69,14 @@ def seed_scalping_model(db: Session):
         file_path="models/model_realistic_xauusd_M15_20251219_100151.pkl",
         training_status="completed",  # Mark as trained
         config={
-            "lookahead": 8,
+            "strategy_type": "ml_scalping",
+            "check_interval_minutes": 1,      # Check every 1 minute for scalping
+            "confidence_threshold": 0.55,
+            "max_trades_per_day": 10,         # Allow more trades for scalping
+            "cooldown_minutes": 5,            # Shorter cooldown for scalping
             "tp_pips": 5.0,
             "sl_pips": 8.0,
-            "confidence_threshold": 0.55,
-            "strategy_type": "ml_scalping",
+            "lookahead": 8,
             "description": "High win-rate scalping model. TP=5 pips, SL=8 pips. 58% win rate at 55% confidence.",
         },
         performance_metrics={

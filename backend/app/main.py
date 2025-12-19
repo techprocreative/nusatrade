@@ -43,16 +43,16 @@ async def lifespan(app: FastAPI):
     try:
         from app.services.auto_trading import run_auto_trading
 
-        # Run auto-trading every 15 minutes
+        # Run auto-trading every 1 minute (per-model intervals are checked internally)
         scheduler.add_job(
             run_auto_trading,
-            trigger=IntervalTrigger(minutes=15),
+            trigger=IntervalTrigger(minutes=1),
             id="auto_trading",
             name="Auto Trading Scheduler",
             replace_existing=True,
         )
         scheduler.start()
-        logger.info("✅ Auto-trading scheduler started (interval: 15 minutes)")
+        logger.info("✅ Auto-trading scheduler started (interval: 1 minute, per-model intervals apply)")
     except Exception as e:
         logger.warning(f"⚠️  Failed to start auto-trading scheduler: {e}")
     

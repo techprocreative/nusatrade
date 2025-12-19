@@ -36,12 +36,14 @@ class AutoTradingConfig:
     DEFAULT_MAX_TRADES_PER_DAY = 5
     DEFAULT_COOLDOWN_MINUTES = 30
     DEFAULT_LOT_SIZE = 0.01
+    DEFAULT_CHECK_INTERVAL_MINUTES = 15  # NEW: Default check interval
     
     def __init__(self):
         self.confidence_threshold = self.DEFAULT_CONFIDENCE_THRESHOLD
         self.max_trades_per_day = self.DEFAULT_MAX_TRADES_PER_DAY
         self.cooldown_minutes = self.DEFAULT_COOLDOWN_MINUTES
         self.lot_size = self.DEFAULT_LOT_SIZE
+        self.check_interval_minutes = self.DEFAULT_CHECK_INTERVAL_MINUTES
     
     @classmethod
     def from_model_config(cls, config: Optional[dict]) -> "AutoTradingConfig":
@@ -52,6 +54,7 @@ class AutoTradingConfig:
             instance.max_trades_per_day = config.get("max_trades_per_day", cls.DEFAULT_MAX_TRADES_PER_DAY)
             instance.cooldown_minutes = config.get("cooldown_minutes", cls.DEFAULT_COOLDOWN_MINUTES)
             instance.lot_size = config.get("lot_size", cls.DEFAULT_LOT_SIZE)
+            instance.check_interval_minutes = config.get("check_interval_minutes", cls.DEFAULT_CHECK_INTERVAL_MINUTES)
         return instance
 
 
@@ -62,6 +65,7 @@ class AutoTradingService:
         self._is_running = False
         self._last_run: Optional[datetime] = None
         self._loaded_models: Dict[str, Trainer] = {}  # Cache for loaded models
+        self._last_check_per_model: Dict[str, datetime] = {}  # Track last check time per model
     
     async def run_auto_trading_cycle(self) -> Dict[str, Any]:
         """
@@ -142,8 +146,24 @@ class AutoTradingService:
                 )
 
             for model in active_models:
+                model_id = str(model.id)
+                config = AutoTradingConfig.from_model_config(model.config)
+                now = datetime.utcnow()
+                
+                # Check if model's interval has elapsed
+                last_check = self._last_check_per_model.get(model_id)
+                if last_check:
+                    elapsed_minutes = (now - last_check).total_seconds() / 60
+                    if elapsed_minutes < config.check_interval_minutes:
+                        logger.debug(f"⏭️  Skipping {model.name}: interval {config.check_interval_minutes}min, elapsed {elapsed_minutes:.1f}min")
+                        continue
+                
                 try:
-                    logger.info(f"📈 Processing model: {model.name} ({model.symbol})")
+                    logger.info(f"📈 Processing model: {model.name} ({model.symbol}) [interval: {config.check_interval_minutes}min]")
+                    
+                    # Update last check time BEFORE processing
+                    self._last_check_per_model[model_id] = now
+                    
                     trade_result = await self._process_model(db, model)
                     if trade_result.get("prediction_generated"):
                         results["predictions_generated"] += 1
