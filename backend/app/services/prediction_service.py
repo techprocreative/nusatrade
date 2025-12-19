@@ -122,13 +122,30 @@ class PredictionService:
         
         # Step 5: Load strategy and validate rules
         strategy = None
-        strategy_validation = {
-            "valid": True,
-            "matched_rules": [],
-            "failed_rules": [],
-            "message": "No strategy linked",
-            "current_indicators": {}
-        }
+        
+        # Check for built-in strategy (scalping, profitable models)
+        model_config = model.config or {}
+        strategy_type = model_config.get("strategy_type", "")
+        has_builtin_strategy = strategy_type in ["ml_scalping", "ml_profitable"]
+        
+        # Default strategy validation based on whether model has built-in strategy
+        if has_builtin_strategy:
+            builtin_name = "ML Scalping" if strategy_type == "ml_scalping" else "ML Profitable"
+            strategy_validation = {
+                "valid": True,
+                "matched_rules": [],
+                "failed_rules": [],
+                "message": f"Built-in Strategy: {builtin_name}",
+                "current_indicators": {}
+            }
+        else:
+            strategy_validation = {
+                "valid": True,
+                "matched_rules": [],
+                "failed_rules": [],
+                "message": "No strategy linked",
+                "current_indicators": {}
+            }
         strategy_rules = None
         
         if use_strategy_rules and model.strategy_id:
