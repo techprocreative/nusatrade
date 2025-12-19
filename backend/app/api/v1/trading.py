@@ -158,60 +158,80 @@ def dashboard_stats(
     Get dashboard statistics for the current user.
     Uses real balance from MT5 via connector when available.
     """
-    from datetime import datetime
-    from app.api.websocket.connection_manager import connection_manager
-    
-    # Get all positions and trades
-    positions = trading_service.list_positions(db, current_user.id)
-    trades = trading_service.list_trades(db, current_user.id)
-    
-    # Calculate stats
-    open_positions_count = len(positions)
-    
-    # Calculate equity from positions (handle None values)
-    total_unrealized_pnl = sum(
-        float(pos.profit or 0) for pos in positions
-    ) if positions else 0.0
-    
-    # Calculate today's P/L from closed trades
-    today = datetime.utcnow().date()
-    today_trades = [t for t in trades if t.close_time and t.close_time.date() == today]
-    today_pnl = sum(float(t.profit or 0) for t in today_trades) if today_trades else 0.0
-    
-    # Calculate total realized P/L (only closed trades with profit)
-    closed_trades = [t for t in trades if t.close_time is not None]
-    total_realized_pnl = sum(float(t.profit or 0) for t in closed_trades) if closed_trades else 0.0
-    
-    # Try to get real balance from MT5 via connector
-    mt5_account = connection_manager.get_user_account_info(str(current_user.id))
+    try:
+        from datetime import datetime
+        from app.api.websocket.connection_manager import connection_manager
+        
+        # Get all positions and trades
+        positions = trading_service.list_positions(db, current_user.id)
+        trades = trading_service.list_trades(db, current_user.id)
+        
+        # Calculate stats
+        open_positions_count = len(positions)
+        
+        # Calculate equity from positions (handle None values)
+        total_unrealized_pnl = sum(
+            float(pos.profit or 0) for pos in positions
+        ) if positions else 0.0
+        
+        # Calculate today's P/L from closed trades
+        today = datetime.utcnow().date()
+        today_trades = [t for t in trades if t.close_time and t.close_time.date() == today]
+        today_pnl = sum(float(t.profit or 0) for t in today_trades) if today_trades else 0.0
+        
+        # Calculate total realized P/L (only closed trades with profit)
+        closed_trades = [t for t in trades if t.close_time is not None]
+        total_realized_pnl = sum(float(t.profit or 0) for t in closed_trades) if closed_trades else 0.0
+        
+        # Try to get real balance from MT5 via connector
+        try:
+            mt5_account = connection_manager.get_user_account_info(str(current_user.id))
+        except Exception as e:
+            logger.warning(f"Failed to get MT5 account info: {e}")
+            mt5_account = None
 
-    if mt5_account:
-        # Use real MT5 account data
-        current_balance = mt5_account["balance"]
-        current_equity = mt5_account["equity"]
-        logger.info(f"Using real MT5 balance for user {current_user.id}: ${current_balance:.2f}")
-    else:
-        # Fallback: Calculate from trades (for users without active connector)
-        base_balance = 10000.0  # Default starting balance
-        current_balance = base_balance + total_realized_pnl
-        current_equity = current_balance + total_unrealized_pnl
-        logger.debug(f"No active MT5 connection, using calculated balance for user {current_user.id}")
-    
-    # Calculate win rate (from closed trades only)
-    winning_trades = [t for t in closed_trades if t.profit and float(t.profit) > 0]
-    win_rate = (len(winning_trades) / len(closed_trades) * 100) if closed_trades else 0.0
-    
-    return {
-        "balance": round(current_balance, 2),
-        "equity": round(current_equity, 2),
-        "open_positions": open_positions_count,
-        "today_pnl": round(today_pnl, 2),
-        "total_pnl": round(total_realized_pnl, 2),
-        "unrealized_pnl": round(total_unrealized_pnl, 2),
-        "total_trades": len(closed_trades),
-        "win_rate": round(win_rate, 1),
-        "has_live_connection": mt5_account is not None,
-    }
+        if mt5_account:
+            # Use real MT5 account data
+            current_balance = mt5_account["balance"]
+            current_equity = mt5_account["equity"]
+            logger.info(f"Using real MT5 balance for user {current_user.id}: ${current_balance:.2f}")
+        else:
+            # Fallback: Calculate from trades (for users without active connector)
+            base_balance = 10000.0  # Default starting balance
+            current_balance = base_balance + total_realized_pnl
+            current_equity = current_balance + total_unrealized_pnl
+            logger.debug(f"No active MT5 connection, using calculated balance for user {current_user.id}")
+        
+        # Calculate win rate (from closed trades only)
+        winning_trades = [t for t in closed_trades if t.profit and float(t.profit) > 0]
+        win_rate = (len(winning_trades) / len(closed_trades) * 100) if closed_trades else 0.0
+        
+        return {
+            "balance": round(current_balance, 2),
+            "equity": round(current_equity, 2),
+            "open_positions": open_positions_count,
+            "today_pnl": round(today_pnl, 2),
+            "total_pnl": round(total_realized_pnl, 2),
+            "unrealized_pnl": round(total_unrealized_pnl, 2),
+            "total_trades": len(closed_trades),
+            "win_rate": round(win_rate, 1),
+            "has_live_connection": mt5_account is not None,
+        }
+    except Exception as e:
+        logger.error(f"Error fetching dashboard stats: {e}")
+        # Return safe defaults instead of 500 error
+        return {
+            "balance": 10000.0,
+            "equity": 10000.0,
+            "open_positions": 0,
+            "today_pnl": 0.0,
+            "total_pnl": 0.0,
+            "unrealized_pnl": 0.0,
+            "total_trades": 0,
+            "win_rate": 0.0,
+            "has_live_connection": False,
+            "error": str(e),
+        }
 
 
 @router.post("/position-size/calculate", response_model=PositionSizeResponse)
