@@ -11,6 +11,15 @@ export interface MLModel {
   strategy_id: string | null;
   strategy_name?: string;
   is_pretrained?: boolean;
+  // Model configuration (includes strategy_type, tp_pips, sl_pips, etc.)
+  config?: {
+    strategy_type?: string;  // 'ml_scalping', 'ml_profitable', etc.
+    confidence_threshold?: number;
+    tp_pips?: number;
+    sl_pips?: number;
+    description?: string;
+    [key: string]: any;
+  };
   performance_metrics: {
     accuracy?: number;
     precision?: number;
@@ -23,6 +32,7 @@ export interface MLModel {
     win_rate?: number;
     profit_factor?: number;
     total_trades?: number;
+    risk_reward_ratio?: number;
   } | null;
   training_status?: 'idle' | 'training' | 'completed' | 'failed';
   created_at: string;

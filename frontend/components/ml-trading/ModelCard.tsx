@@ -14,6 +14,9 @@ import {
   TrendingUp,
   Target,
   Star,
+  Clock,
+  Zap,
+  CheckCircle2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { StrategySelector } from "./StrategySelector";
@@ -23,11 +26,29 @@ interface ModelCardProps {
   model: MLModel;
 }
 
+// Helper to get strategy type from model config
+function getStrategyType(model: MLModel): string | null {
+  if (model.config && typeof model.config === 'object') {
+    return model.config.strategy_type || null;
+  }
+  return null;
+}
+
+// Check if model has built-in strategy (scalping models)
+function hasBuiltInStrategy(model: MLModel): boolean {
+  const strategyType = getStrategyType(model);
+  return strategyType === 'ml_scalping' || strategyType === 'ml_profitable';
+}
+
 export function ModelCard({ model }: ModelCardProps) {
   const [showStrategySelector, setShowStrategySelector] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const token = typeof window !== 'undefined' ? localStorage.getItem("token") || "" : "";
+
+  const strategyType = getStrategyType(model);
+  const isScalping = strategyType === 'ml_scalping';
+  const builtInStrategy = hasBuiltInStrategy(model);
 
   // Activate mutation
   const activateMutation = useMutation({
@@ -61,6 +82,12 @@ export function ModelCard({ model }: ModelCardProps) {
   });
 
   const handleActivate = () => {
+    // Built-in strategy models can activate directly
+    if (builtInStrategy) {
+      activateMutation.mutate();
+      return;
+    }
+
     if (!model.strategy_id) {
       toast({
         title: "Strategy Required",
@@ -73,21 +100,36 @@ export function ModelCard({ model }: ModelCardProps) {
     activateMutation.mutate();
   };
 
-  const hasStrategy = !!model.strategy_id;
+  const hasStrategy = !!model.strategy_id || builtInStrategy;
   const canActivate = hasStrategy && model.file_path;
+
+  // Get metrics for display
+  const metrics = model.performance_metrics || {};
+  const winRate = metrics.win_rate;
+  const accuracy = metrics.accuracy;
+  const totalTrades = metrics.total_trades;
+  const profitFactor = metrics.profit_factor;
 
   return (
     <>
-      <Card className={model.is_active ? "border-green-500" : ""}>
+      <Card className={model.is_active ? "border-green-500 border-2" : ""}>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <CardTitle className="flex items-center gap-2">
                 {model.name}
-                {model.is_active && <Badge variant="default">Active</Badge>}
+                {model.is_active && <Badge variant="default" className="bg-green-600">Active</Badge>}
+                {isScalping && <Badge variant="outline" className="text-orange-500 border-orange-500">Scalping</Badge>}
               </CardTitle>
-              <CardDescription>
-                {model.symbol} • {model.model_type}
+              <CardDescription className="flex items-center gap-2">
+                <span>{model.symbol}</span>
+                <span>•</span>
+                <span className="flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {model.timeframe}
+                </span>
+                <span>•</span>
+                <span>{model.model_type}</span>
               </CardDescription>
             </div>
             {model.is_active ? (
@@ -115,30 +157,48 @@ export function ModelCard({ model }: ModelCardProps) {
         <CardContent className="space-y-4">
           {/* Performance Metrics */}
           {model.performance_metrics && (
-            <div className="grid grid-cols-3 gap-2 text-sm">
-              {model.performance_metrics.accuracy && (
-                <div className="flex items-center gap-1">
-                  <Target className="h-3 w-3 text-muted-foreground" />
-                  <span>{(model.performance_metrics.accuracy * 100).toFixed(1)}%</span>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+              {winRate !== undefined && (
+                <div className="flex flex-col items-center p-2 bg-muted rounded-lg">
+                  <TrendingUp className="h-4 w-4 text-green-500 mb-1" />
+                  <span className="text-lg font-semibold">{winRate.toFixed(1)}%</span>
+                  <span className="text-xs text-muted-foreground">Win Rate</span>
                 </div>
               )}
-              {model.performance_metrics.win_rate && (
-                <div className="flex items-center gap-1">
-                  <TrendingUp className="h-3 w-3 text-muted-foreground" />
-                  <span>{(model.performance_metrics.win_rate * 100).toFixed(1)}%</span>
+              {accuracy !== undefined && (
+                <div className="flex flex-col items-center p-2 bg-muted rounded-lg">
+                  <Target className="h-4 w-4 text-blue-500 mb-1" />
+                  <span className="text-lg font-semibold">{accuracy.toFixed(1)}%</span>
+                  <span className="text-xs text-muted-foreground">Accuracy</span>
                 </div>
               )}
-              {model.performance_metrics.profit_factor && (
-                <div className="flex items-center gap-1">
-                  <Star className="h-3 w-3 text-muted-foreground" />
-                  <span>{model.performance_metrics.profit_factor.toFixed(2)}</span>
+              {totalTrades !== undefined && (
+                <div className="flex flex-col items-center p-2 bg-muted rounded-lg">
+                  <Zap className="h-4 w-4 text-yellow-500 mb-1" />
+                  <span className="text-lg font-semibold">{totalTrades}</span>
+                  <span className="text-xs text-muted-foreground">Trades</span>
+                </div>
+              )}
+              {profitFactor !== undefined && (
+                <div className="flex flex-col items-center p-2 bg-muted rounded-lg">
+                  <Star className="h-4 w-4 text-purple-500 mb-1" />
+                  <span className="text-lg font-semibold">{profitFactor.toFixed(2)}</span>
+                  <span className="text-xs text-muted-foreground">Profit Factor</span>
                 </div>
               )}
             </div>
           )}
 
           {/* Strategy Status */}
-          {hasStrategy ? (
+          {builtInStrategy ? (
+            <Alert className="border-green-500/50 bg-green-500/10">
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              <AlertDescription>
+                <strong>Built-in Strategy:</strong>{" "}
+                {isScalping ? "ML Scalping (TP 5 pips, SL 8 pips)" : "ML Profitable"}
+              </AlertDescription>
+            </Alert>
+          ) : hasStrategy && model.strategy_name ? (
             <Alert>
               <LinkIcon className="h-4 w-4" />
               <AlertDescription>
@@ -173,7 +233,7 @@ export function ModelCard({ model }: ModelCardProps) {
                 disabled={activateMutation.isPending}
               >
                 <Power className="mr-2 h-4 w-4" />
-                Activate
+                Activate for Auto-Trading
               </Button>
             )}
           </div>
@@ -189,3 +249,4 @@ export function ModelCard({ model }: ModelCardProps) {
     </>
   );
 }
+

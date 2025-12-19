@@ -182,21 +182,39 @@ class PredictionService:
         trailing_stop_config = None
         
         if final_direction != "HOLD":
-            risk_config = self._get_risk_config(strategy, model)
-            atr = calculate_atr_from_dataframe(featured_data, period=14)
-            
-            stop_loss, take_profit = calculate_sl_tp(
-                entry_price=entry_price,
-                direction=final_direction,
-                config=risk_config,
-                atr=atr,
-            )
-            
-            # Calculate risk/reward ratio
-            if stop_loss and take_profit and stop_loss != entry_price:
-                risk_reward_ratio = round(
-                    abs(take_profit - entry_price) / abs(entry_price - stop_loss), 2
+            # Check if this is a scalping model with fixed pip TP/SL
+            model_config = model.config or {}
+            if model_config.get("strategy_type") == "ml_scalping":
+                # Use fixed pips from model config
+                tp_pips = model_config.get("tp_pips", 5.0)
+                sl_pips = model_config.get("sl_pips", 8.0)
+                pip_value = 0.1  # XAUUSD pip = $0.10
+                
+                if final_direction == "BUY":
+                    stop_loss = entry_price - (sl_pips * pip_value)
+                    take_profit = entry_price + (tp_pips * pip_value)
+                else:  # SELL
+                    stop_loss = entry_price + (sl_pips * pip_value)
+                    take_profit = entry_price - (tp_pips * pip_value)
+                
+                risk_reward_ratio = tp_pips / sl_pips
+            else:
+                # Standard ATR-based calculation
+                risk_config = self._get_risk_config(strategy, model)
+                atr = calculate_atr_from_dataframe(featured_data, period=14)
+                
+                stop_loss, take_profit = calculate_sl_tp(
+                    entry_price=entry_price,
+                    direction=final_direction,
+                    config=risk_config,
+                    atr=atr,
                 )
+                
+                # Calculate risk/reward ratio
+                if stop_loss and take_profit and stop_loss != entry_price:
+                    risk_reward_ratio = round(
+                        abs(take_profit - entry_price) / abs(entry_price - stop_loss), 2
+                    )
             
             # Get trailing stop config from strategy
             trailing_stop_config = self._get_trailing_stop_config(strategy)
@@ -248,7 +266,14 @@ class PredictionService:
                 "probabilities": {}
             }
 
-        # Load model (with thread-safe caching)
+        # Check if this is a scalping model (uses different loading/prediction)
+        model_config = model.config or {}
+        strategy_type = model_config.get("strategy_type", "")
+        
+        if strategy_type == "ml_scalping" or "scalping" in model.file_path.lower():
+            return self._get_scalping_prediction(model, featured_data)
+        
+        # Standard ML model loading (with thread-safe caching)
         model_id = str(model.id)
 
         with self._cache_lock:
@@ -289,6 +314,177 @@ class PredictionService:
                 "generated_by": "fallback",
                 "probabilities": {}
             }
+    
+    def _get_scalping_prediction(
+        self,
+        model: MLModel,
+        featured_data: pd.DataFrame
+    ) -> Dict[str, Any]:
+        """Get prediction from scalping model (LightGBM/XGBoost with custom features)."""
+        import pickle
+        import numpy as np
+        
+        try:
+            # Load the scalping model (it's a dict with model, scaler, features)
+            model_id = str(model.id)
+            
+            with self._cache_lock:
+                if model_id not in self._model_cache:
+                    with open(model.file_path, 'rb') as f:
+                        model_data = pickle.load(f)
+                    self._model_cache[model_id] = model_data
+                    logger.info(f"Loaded scalping model: {model.name}")
+                
+                model_data = self._model_cache[model_id]
+            
+            # Get model components
+            ml_model = model_data.get('model')
+            scaler = model_data.get('scaler')
+            feature_columns = model_data.get('feature_columns', [])
+            
+            if ml_model is None:
+                return {"direction": "HOLD", "confidence": 0.0, "generated_by": "fallback"}
+            
+            # Create scalping-specific features
+            df = self._create_scalping_features(featured_data.copy())
+            
+            if len(df) == 0:
+                return {"direction": "HOLD", "confidence": 0.0, "generated_by": "fallback"}
+            
+            # Get features that exist in data
+            available_features = [c for c in feature_columns if c in df.columns]
+            
+            if len(available_features) < len(feature_columns) * 0.5:
+                logger.warning(f"Not enough scalping features: {len(available_features)}/{len(feature_columns)}")
+                return {"direction": "HOLD", "confidence": 0.0, "generated_by": "missing_features"}
+            
+            # Get last row
+            X = df[available_features].iloc[-1:].values
+            
+            # Scale features
+            if scaler is not None:
+                X = scaler.transform(X)
+            
+            X = np.nan_to_num(X)
+            
+            # Predict
+            proba = ml_model.predict_proba(X)[0]
+            pred_class = np.argmax(proba)
+            confidence = float(proba[pred_class])
+            
+            # Map classes
+            signal_map = {0: "HOLD", 1: "BUY", 2: "SELL"}
+            direction = signal_map.get(pred_class, "HOLD")
+            
+            # Check confidence threshold from model config
+            model_config = model.config or {}
+            threshold = model_config.get("confidence_threshold", 0.55)
+            
+            if confidence < threshold:
+                logger.debug(f"Scalping confidence {confidence:.2%} below threshold {threshold:.2%}")
+                return {
+                    "direction": "HOLD",
+                    "confidence": confidence,
+                    "generated_by": "ml_scalping",
+                    "original_signal": direction,
+                    "reason": "low_confidence",
+                }
+            
+            logger.info(f"🎯 Scalping signal: {direction} @ {confidence:.1%}")
+            
+            return {
+                "direction": direction,
+                "confidence": confidence,
+                "generated_by": "ml_scalping",
+                "probabilities": {signal_map[i]: float(proba[i]) for i in range(len(proba))},
+            }
+            
+        except Exception as e:
+            logger.error(f"Scalping prediction failed: {e}")
+            return {"direction": "HOLD", "confidence": 0.0, "generated_by": "fallback"}
+    
+    def _create_scalping_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Create features for scalping model prediction."""
+        import numpy as np
+        
+        # Normalize column names
+        df.columns = [c.lower() for c in df.columns]
+        
+        # EMAs
+        for p in [10, 20, 50, 100]:
+            df[f'ema_{p}'] = df['close'].ewm(span=p).mean()
+        
+        # Trend
+        df['trend_score'] = (
+            (df['ema_10'] > df['ema_20']).astype(int) +
+            (df['ema_20'] > df['ema_50']).astype(int) +
+            (df['ema_50'] > df['ema_100']).astype(int)
+        )
+        df['strong_uptrend'] = (df['trend_score'] >= 2).astype(int)
+        df['strong_downtrend'] = (df['trend_score'] <= 1).astype(int)
+        df['dist_ema_20'] = (df['close'] - df['ema_20']) / df['ema_20']
+        
+        # RSI
+        delta = df['close'].diff()
+        gain = delta.where(delta > 0, 0)
+        loss = -delta.where(delta < 0, 0)
+        avg_gain = gain.rolling(14).mean()
+        avg_loss = loss.rolling(14).mean()
+        rs = avg_gain / (avg_loss + 1e-8)
+        df['rsi'] = 100 - (100 / (1 + rs))
+        df['rsi_oversold'] = (df['rsi'] < 30).astype(int)
+        df['rsi_overbought'] = (df['rsi'] > 70).astype(int)
+        
+        # MACD
+        ema_12 = df['close'].ewm(span=12).mean()
+        ema_26 = df['close'].ewm(span=26).mean()
+        df['macd'] = ema_12 - ema_26
+        df['macd_signal'] = df['macd'].ewm(span=9).mean()
+        df['macd_bull'] = (df['macd'] > df['macd_signal']).astype(int)
+        
+        # Stochastic
+        low_min = df['low'].rolling(14).min()
+        high_max = df['high'].rolling(14).max()
+        df['stoch'] = 100 * (df['close'] - low_min) / (high_max - low_min + 1e-8)
+        df['stoch_oversold'] = (df['stoch'] < 20).astype(int)
+        df['stoch_overbought'] = (df['stoch'] > 80).astype(int)
+        
+        # ATR
+        df['tr'] = np.maximum(
+            df['high'] - df['low'],
+            np.maximum(
+                abs(df['high'] - df['close'].shift(1)),
+                abs(df['low'] - df['close'].shift(1))
+            )
+        )
+        df['atr'] = df['tr'].rolling(14).mean()
+        df['atr_norm'] = df['atr'] / df['close']
+        df['vol_ratio'] = df['atr'] / (df['atr'].rolling(50).mean() + 1e-8)
+        
+        # Candles
+        df['bullish'] = (df['close'] > df['open']).astype(int)
+        df['body'] = abs(df['close'] - df['open']) / (df['high'] - df['low'] + 1e-8)
+        
+        # Returns
+        df['ret_1'] = df['close'].pct_change(1)
+        df['ret_3'] = df['close'].pct_change(3)
+        df['ret_5'] = df['close'].pct_change(5)
+        
+        # Time (from timestamp or default)
+        if 'timestamp' in df.columns:
+            try:
+                df['hour'] = pd.to_datetime(df['timestamp']).dt.hour
+                df['dow'] = pd.to_datetime(df['timestamp']).dt.dayofweek
+            except:
+                df['hour'] = 12
+                df['dow'] = 2
+        else:
+            df['hour'] = 12
+            df['dow'] = 2
+        
+        df['prime_time'] = ((df['hour'] >= 8) & (df['hour'] < 16)).astype(int)
+        
+        return df.dropna()
     
     def _get_risk_config(
         self,
