@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+from typing import Optional
 
 from app.api import deps
 from app.models.user import User
@@ -14,18 +15,32 @@ router = APIRouter()
 
 class UserSettings(BaseModel):
     """User settings schema."""
+    # Trading settings
     defaultLotSize: str | None = None
     maxLotSize: str | None = None
     maxOpenPositions: str | None = None
     defaultStopLoss: str | None = None
     defaultTakeProfit: str | None = None
     riskPerTrade: str | None = None
+    # Notification settings
     emailNotifications: bool | None = None
     tradeAlerts: bool | None = None
     dailySummary: bool | None = None
+    # Telegram settings
+    telegramEnabled: bool | None = None
+    telegramBotToken: str | None = None
+    telegramChatId: str | None = None
+    # Auto-trading settings
+    autoTradingInterval: int | None = None  # Minutes: 1, 5, 15, 30, 60
+    autoTradingEnabled: bool | None = None
+    # Display settings
     theme: str | None = None
     timezone: str | None = None
     language: str | None = None
+    # LLM settings
+    llmApiKey: str | None = None
+    llmBaseUrl: str | None = None
+    llmModel: str | None = None
 
 
 @router.get("/me", response_model=UserOut)
@@ -87,3 +102,47 @@ def get_user_settings(
     Returns user's saved settings merged with defaults.
     """
     return current_user.get_settings()
+
+
+@router.post("/settings/test-telegram")
+async def test_telegram_connection(
+    current_user: User = Depends(deps.get_current_user)
+):
+    """
+    Test Telegram bot connection.
+    Sends a test message to verify the bot token and chat ID are valid.
+    """
+    from app.services.telegram_service import TelegramService
+    
+    settings = current_user.get_settings()
+    bot_token = settings.get("telegramBotToken", "")
+    chat_id = settings.get("telegramChatId", "")
+    
+    if not bot_token:
+        raise HTTPException(
+            status_code=400,
+            detail="Telegram bot token not configured. Please set it in settings first."
+        )
+    
+    if not chat_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Telegram chat ID not configured. Please set it in settings first."
+        )
+    
+    service = TelegramService(bot_token=bot_token, chat_id=chat_id)
+    result = await service.test_connection()
+    
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Telegram connection failed: {result.get('error', 'Unknown error')}"
+        )
+    
+    return {
+        "success": True,
+        "message": "Telegram connection successful! Test message sent.",
+        "bot_username": result.get("bot_username"),
+        "bot_name": result.get("bot_name"),
+    }
+

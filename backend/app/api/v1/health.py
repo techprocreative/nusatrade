@@ -122,3 +122,81 @@ async def app_info():
         "api_version": "v1",
         "docs_url": "/docs",
     }
+
+
+@router.get("/auto-trading/status")
+async def auto_trading_status(db: Session = Depends(deps.get_db)):
+    """
+    Get auto-trading scheduler status and statistics.
+    
+    Returns current state of the auto-trading system including:
+    - Scheduler status (enabled/running)
+    - Active model count
+    - Today's predictions count
+    - Last run time
+    """
+    from app.services.auto_trading import auto_trading_service
+    from app.models.ml import MLModel, MLPrediction
+    
+    try:
+        # Get active models count (with strategy linked and trained)
+        active_models_with_strategy = db.query(MLModel).filter(
+            MLModel.is_active == True,
+            MLModel.file_path != None,
+            MLModel.strategy_id != None,
+        ).count()
+        
+        # Get active but missing requirements
+        active_without_strategy = db.query(MLModel).filter(
+            MLModel.is_active == True,
+            MLModel.file_path != None,
+            MLModel.strategy_id == None,
+        ).count()
+        
+        active_not_trained = db.query(MLModel).filter(
+            MLModel.is_active == True,
+            MLModel.file_path == None,
+        ).count()
+        
+        # Get today's predictions
+        today = datetime.utcnow().date()
+        today_predictions = db.query(MLPrediction).filter(
+            MLPrediction.created_at >= datetime.combine(today, datetime.min.time())
+        ).count()
+        
+        # Calculate next scheduled run
+        last_run = auto_trading_service._last_run
+        if last_run:
+            from datetime import timedelta
+            next_run = last_run + timedelta(minutes=15)
+        else:
+            next_run = None
+        
+        return {
+            "status": "ok",
+            "scheduler": {
+                "enabled": True,
+                "interval_minutes": 15,
+                "is_running": auto_trading_service._is_running,
+                "last_run": last_run.isoformat() if last_run else None,
+                "next_scheduled_run": next_run.isoformat() if next_run else "pending first run",
+            },
+            "models": {
+                "active_and_ready": active_models_with_strategy,
+                "active_missing_strategy": active_without_strategy,
+                "active_not_trained": active_not_trained,
+            },
+            "predictions": {
+                "today_count": today_predictions,
+            },
+            "health_tips": [] if active_models_with_strategy > 0 else [
+                "No active models ready for auto-trading.",
+                "Ensure you have a model that is: (1) activated, (2) trained, (3) linked to a strategy."
+            ],
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+        }
+

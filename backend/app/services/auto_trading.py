@@ -75,6 +75,11 @@ class AutoTradingService:
         self._is_running = True
         self._last_run = datetime.utcnow()
         
+        logger.info("=" * 60)
+        logger.info("🤖 AUTO-TRADING CYCLE STARTING")
+        logger.info(f"   Time: {self._last_run.isoformat()}")
+        logger.info("=" * 60)
+        
         results = {
             "started_at": self._last_run.isoformat(),
             "models_checked": 0,
@@ -94,7 +99,7 @@ class AutoTradingService:
             ).all()
 
             results["models_checked"] = len(active_models)
-            logger.info(f"Auto-trading: Checking {len(active_models)} active models with strategies")
+            logger.info(f"📊 Found {len(active_models)} active models with strategies")
 
             # Warn about models without strategy
             models_without_strategy = db.query(MLModel).filter(
@@ -109,29 +114,51 @@ class AutoTradingService:
                     "Please link a strategy to enable auto-trading."
                 )
 
+            # Also log models without file_path
+            untrained_models = db.query(MLModel).filter(
+                MLModel.is_active == True,
+                MLModel.file_path == None,
+            ).count()
+            
+            if untrained_models > 0:
+                logger.warning(
+                    f"⚠️  {untrained_models} active model(s) skipped: not trained yet."
+                )
+
             for model in active_models:
                 try:
+                    logger.info(f"📈 Processing model: {model.name} ({model.symbol})")
                     trade_result = await self._process_model(db, model)
                     if trade_result.get("prediction_generated"):
                         results["predictions_generated"] += 1
                     if trade_result.get("trade_executed"):
                         results["trades_executed"] += 1
+                    logger.info(f"   Result: {trade_result.get('reason', 'OK')}")
                 except Exception as e:
                     error_msg = f"Error processing model {model.id}: {str(e)}"
                     logger.error(error_msg)
                     results["errors"].append(error_msg)
             
             results["completed_at"] = datetime.utcnow().isoformat()
-            logger.info(f"Auto-trading cycle completed: {results}")
+            
+            logger.info("=" * 60)
+            logger.info("📊 AUTO-TRADING CYCLE SUMMARY")
+            logger.info(f"   Models checked: {results['models_checked']}")
+            logger.info(f"   Predictions generated: {results['predictions_generated']}")
+            logger.info(f"   Trades executed: {results['trades_executed']}")
+            if results['errors']:
+                logger.warning(f"   Errors: {len(results['errors'])}")
+            logger.info("=" * 60)
             
         except Exception as e:
-            logger.error(f"Auto-trading cycle failed: {e}")
+            logger.error(f"❌ Auto-trading cycle failed: {e}")
             results["errors"].append(str(e))
         finally:
             db.close()
             self._is_running = False
         
         return results
+
     
     def _load_model(self, model: MLModel) -> Optional[Trainer]:
         """Load a trained ML model."""
@@ -480,6 +507,25 @@ class AutoTradingService:
                     f"✅ Trade executed via MT5: {direction} {symbol} @ {entry_price}, "
                     f"Ticket: {mt5_result.get('ticket', 'N/A')}"
                 )
+                
+                # Send notifications (async, non-blocking)
+                try:
+                    await self._send_trade_notification(
+                        user=user,
+                        trade_data={
+                            "type": direction,
+                            "symbol": symbol,
+                            "lot_size": config.lot_size,
+                            "entry_price": entry_price,
+                            "stop_loss": stop_loss,
+                            "take_profit": take_profit,
+                            "ticket": mt5_result.get("ticket", "N/A"),
+                        },
+                        action="executed",
+                    )
+                except Exception as notify_error:
+                    logger.warning(f"Failed to send trade notification: {notify_error}")
+                
                 return True
             else:
                 logger.warning(
@@ -492,6 +538,26 @@ class AutoTradingService:
             logger.error(f"❌ Failed to execute trade: {e}", exc_info=True)
             db.rollback()
             return False
+    
+    async def _send_trade_notification(
+        self,
+        user,
+        trade_data: Dict[str, Any],
+        action: str = "executed",
+    ):
+        """Send trade notification via Telegram and Email."""
+        from app.services.telegram_service import send_trade_notification as send_telegram
+        from app.services.email_service import send_trade_notification as send_email
+        
+        user_settings = user.get_settings() if user else {}
+        
+        # Send via Telegram if enabled
+        if user_settings.get("telegramEnabled") and user_settings.get("telegramBotToken"):
+            await send_telegram(user_settings, trade_data, action)
+        
+        # Send via Email if enabled
+        if user_settings.get("emailNotifications") and user_settings.get("tradeAlerts"):
+            send_email(user, trade_data)
 
 
 # Global service instance

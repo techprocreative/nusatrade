@@ -3,18 +3,29 @@ import apiClient from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 
 export interface UserSettings {
+  // Trading settings
   defaultLotSize: string;
   maxLotSize: string;
   maxOpenPositions: string;
   defaultStopLoss: string;
   defaultTakeProfit: string;
   riskPerTrade: string;
+  // Notification settings
   emailNotifications: boolean;
   tradeAlerts: boolean;
   dailySummary: boolean;
+  // Telegram settings
+  telegramEnabled: boolean;
+  telegramBotToken: string;
+  telegramChatId: string;
+  // Auto-trading settings
+  autoTradingInterval: number;
+  autoTradingEnabled: boolean;
+  // LLM settings
   llmApiKey?: string;
   llmBaseUrl?: string;
   llmModel?: string;
+  // Display settings
   theme: string;
   timezone: string;
   language: string;

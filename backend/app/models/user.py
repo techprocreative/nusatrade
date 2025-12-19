@@ -10,19 +10,30 @@ from app.core.database import Base
 
 # Default settings for new users
 DEFAULT_USER_SETTINGS = {
+    # Trading settings
     "defaultLotSize": "0.1",
     "maxLotSize": "1.0",
     "maxOpenPositions": "5",
     "defaultStopLoss": "50",
     "defaultTakeProfit": "100",
     "riskPerTrade": "2",
+    # Notification settings
     "emailNotifications": True,
     "tradeAlerts": True,
     "dailySummary": False,
+    # Telegram settings
+    "telegramEnabled": False,
+    "telegramBotToken": "",
+    "telegramChatId": "",
+    # Auto-trading settings
+    "autoTradingInterval": 15,  # Minutes: 1, 5, 15, 30, 60
+    "autoTradingEnabled": True,
+    # Display settings
     "theme": "dark",
     "timezone": "Asia/Jakarta",
     "language": "en",
 }
+
 
 
 class User(Base):

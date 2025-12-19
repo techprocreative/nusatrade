@@ -87,7 +87,10 @@ class MarketDataFetcher:
             data.columns = [c.lower() if isinstance(c, str) else str(c).lower() for c in data.columns]
             data = data.reset_index()
             
-            # Handle timezone-aware datetime
+            # Rename index column to lowercase as well (after reset_index)
+            data.columns = [c.lower() if isinstance(c, str) else str(c).lower() for c in data.columns]
+            
+            # Handle timezone-aware datetime - normalize to 'timestamp'
             if 'datetime' in data.columns:
                 data = data.rename(columns={'datetime': 'timestamp'})
             elif 'date' in data.columns:

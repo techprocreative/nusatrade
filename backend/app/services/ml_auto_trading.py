@@ -186,7 +186,7 @@ class MLAutoTradingService:
 
     async def _load_market_data(self, symbol: str) -> Optional[pd.DataFrame]:
         """
-        Load recent market data for prediction.
+        Load recent market data for prediction using real-time data.
 
         Args:
             symbol: Trading symbol
@@ -194,27 +194,38 @@ class MLAutoTradingService:
         Returns:
             DataFrame with OHLCV data or None
         """
+        from app.services.market_data import MarketDataFetcher
+        
         try:
-            # Load from CSV (in production, this would fetch from MT5 or database)
-            data_path = f"ohlcv/{symbol.lower()}/{symbol.lower()}_1h_clean.csv"
-
-            import os
-            if not os.path.exists(data_path):
-                logger.warning(f"Data file not found: {data_path}")
+            # Use real-time data from yfinance
+            logger.info(f"Fetching real-time market data for {symbol}...")
+            
+            df = MarketDataFetcher.fetch_data(symbol, timeframe="H1", bars=200)
+            
+            if df is None or len(df) < 100:
+                logger.warning(f"Insufficient real-time data for {symbol}: got {len(df) if df is not None else 0} rows")
                 return None
-
-            df = pd.read_csv(data_path)
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
-
+            
+            # Ensure timestamp column exists
+            if 'timestamp' not in df.columns:
+                if 'date' in df.columns:
+                    df = df.rename(columns={'date': 'timestamp'})
+                elif 'datetime' in df.columns:
+                    df = df.rename(columns={'datetime': 'timestamp'})
+            
+            if 'timestamp' in df.columns:
+                df['timestamp'] = pd.to_datetime(df['timestamp'])
+            
             # Get last 100 candles for feature calculation
-            df = df.tail(100)
-
-            logger.info(f"Loaded {len(df)} candles for {symbol}")
+            df = df.tail(100).reset_index(drop=True)
+            
+            logger.info(f"✅ Loaded {len(df)} real-time candles for {symbol}")
             return df
 
         except Exception as e:
-            logger.error(f"Failed to load market data: {e}")
+            logger.error(f"Failed to load real-time market data for {symbol}: {e}")
             return None
+
 
     async def _execute_trade_mt5(
         self,

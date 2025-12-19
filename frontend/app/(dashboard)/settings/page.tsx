@@ -15,7 +15,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUserSettings, useUpdateUserSettings, type UserSettings } from "@/hooks/api/useSettings";
-import { Loader2, User, Mail, Calendar } from "lucide-react";
+import { Loader2, User, Mail, Calendar, Send, Bot, Clock } from "lucide-react";
 
 interface Settings extends UserSettings {
   llmApiKey: string;
@@ -53,6 +53,11 @@ export default function SettingsPage() {
     emailNotifications: true,
     tradeAlerts: true,
     dailySummary: false,
+    telegramEnabled: false,
+    telegramBotToken: "",
+    telegramChatId: "",
+    autoTradingInterval: 15,
+    autoTradingEnabled: true,
     llmApiKey: "",
     llmBaseUrl: "",
     llmModel: "gpt-4-turbo-preview",
@@ -126,6 +131,7 @@ export default function SettingsPage() {
         <TabsList className="bg-slate-800 border border-slate-700">
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="trading">Trading</TabsTrigger>
+          <TabsTrigger value="auto-trading">Auto Trading</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="api">API Keys</TabsTrigger>
           <TabsTrigger value="display">Display</TabsTrigger>
@@ -287,6 +293,187 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Auto Trading Settings */}
+        <TabsContent value="auto-trading">
+          <div className="space-y-6">
+            {/* Scheduler Settings */}
+            <Card className="bg-slate-800 border-slate-700">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Bot className="w-5 h-5" />
+                  Auto Trading Bot
+                </CardTitle>
+                <CardDescription>
+                  Configure how your ML bots automatically generate and execute trades
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between p-4 bg-slate-700/50 rounded-lg">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="autoTradingEnabled" className="text-base">
+                      Enable Auto Trading
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Allow ML bots to execute trades automatically
+                    </p>
+                  </div>
+                  <Switch
+                    id="autoTradingEnabled"
+                    checked={settings.autoTradingEnabled}
+                    onCheckedChange={(checked) =>
+                      setSettings({ ...settings, autoTradingEnabled: checked })
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="autoTradingInterval" className="flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    Scheduler Interval
+                  </Label>
+                  <Select
+                    value={String(settings.autoTradingInterval)}
+                    onValueChange={(value) =>
+                      setSettings({ ...settings, autoTradingInterval: parseInt(value) })
+                    }
+                  >
+                    <SelectTrigger id="autoTradingInterval">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">Every 1 minute (Scalping)</SelectItem>
+                      <SelectItem value="5">Every 5 minutes (Day Trading)</SelectItem>
+                      <SelectItem value="15">Every 15 minutes (Default)</SelectItem>
+                      <SelectItem value="30">Every 30 minutes (Swing)</SelectItem>
+                      <SelectItem value="60">Every 60 minutes (Position)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    How often the bot checks for trading signals. Shorter intervals = more signals but higher API usage.
+                  </p>
+                </div>
+
+                <div className="p-4 bg-blue-600/10 border border-blue-600/30 rounded-lg">
+                  <p className="text-blue-400 text-sm font-medium mb-2">
+                    💡 Interval Recommendations
+                  </p>
+                  <ul className="text-muted-foreground text-sm space-y-1 ml-4 list-disc">
+                    <li><strong>1-5 min:</strong> For M1-M15 strategies (scalping)</li>
+                    <li><strong>15 min:</strong> For H1 strategies (default)</li>
+                    <li><strong>30-60 min:</strong> For H4-D1 strategies (swing trading)</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Telegram Notifications */}
+            <Card className="bg-slate-800 border-slate-700">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Send className="w-5 h-5" />
+                  Telegram Notifications
+                </CardTitle>
+                <CardDescription>
+                  Receive trading signals and alerts directly in Telegram
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between p-4 bg-slate-700/50 rounded-lg">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="telegramEnabled" className="text-base">
+                      Enable Telegram Notifications
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Get trade signals and execution alerts via Telegram
+                    </p>
+                  </div>
+                  <Switch
+                    id="telegramEnabled"
+                    checked={settings.telegramEnabled}
+                    onCheckedChange={(checked) =>
+                      setSettings({ ...settings, telegramEnabled: checked })
+                    }
+                  />
+                </div>
+
+                {settings.telegramEnabled && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="telegramBotToken">Bot Token</Label>
+                      <Input
+                        id="telegramBotToken"
+                        type="password"
+                        value={settings.telegramBotToken}
+                        onChange={(e) =>
+                          setSettings({ ...settings, telegramBotToken: e.target.value })
+                        }
+                        placeholder="123456789:ABCdefGHIjklmNOPqrstuv..."
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Get this from @BotFather on Telegram
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="telegramChatId">Chat ID</Label>
+                      <Input
+                        id="telegramChatId"
+                        value={settings.telegramChatId}
+                        onChange={(e) =>
+                          setSettings({ ...settings, telegramChatId: e.target.value })
+                        }
+                        placeholder="-1001234567890"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Your personal chat ID or group ID
+                      </p>
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+                          const response = await fetch(`${API_BASE_URL}/api/v1/users/settings/test-telegram`, {
+                            method: 'POST',
+                            headers: {
+                              "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+                            }
+                          });
+                          const data = await response.json();
+                          if (response.ok) {
+                            alert(`✅ Connected to @${data.bot_username}! Check your Telegram.`);
+                          } else {
+                            alert(`❌ ${data.detail}`);
+                          }
+                        } catch (error) {
+                          alert('❌ Failed to test connection');
+                        }
+                      }}
+                    >
+                      <Send className="w-4 h-4 mr-2" />
+                      Test Connection
+                    </Button>
+
+                    <div className="p-4 bg-green-600/10 border border-green-600/30 rounded-lg">
+                      <p className="text-green-400 text-sm font-medium mb-2">
+                        📱 How to Setup Telegram Bot
+                      </p>
+                      <ol className="text-muted-foreground text-sm space-y-1 ml-4 list-decimal">
+                        <li>Search for @BotFather on Telegram</li>
+                        <li>Send /newbot and follow instructions</li>
+                        <li>Copy the Bot Token and paste above</li>
+                        <li>Send /start to your new bot</li>
+                        <li>Get your Chat ID from @userinfobot</li>
+                      </ol>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* Notification Settings */}
