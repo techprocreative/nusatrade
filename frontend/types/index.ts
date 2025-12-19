@@ -118,6 +118,13 @@ export interface MLModel {
   strategy_name?: string;
   is_active: boolean;
   is_pretrained?: boolean;
+  config?: {
+    strategy_type?: string;  // 'ml_scalping', 'ml_profitable', etc.
+    confidence_threshold?: number;
+    tp_pips?: number;
+    sl_pips?: number;
+    [key: string]: unknown;
+  };
   performance_metrics: {
     accuracy?: number;
     precision?: number;

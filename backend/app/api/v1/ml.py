@@ -46,6 +46,7 @@ class ModelResponse(BaseModel):
     strategy_name: Optional[str] = None
     is_active: bool
     is_pretrained: bool = False
+    config: Optional[dict] = None  # Include model config for frontend
     performance_metrics: Optional[dict]
     training_status: str = "idle"
     training_error: Optional[str] = None
@@ -111,6 +112,7 @@ def list_models(
             strategy_id=str(m.strategy_id) if m.strategy_id else None,
             strategy_name=strategy_name,
             is_active=m.is_active or False,
+            config=m.config,  # Include config for frontend
             performance_metrics=m.performance_metrics,
             training_status=m.training_status or "idle",
             training_error=m.training_error,

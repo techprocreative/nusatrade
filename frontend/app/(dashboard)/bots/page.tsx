@@ -119,11 +119,10 @@ function PredictionCard({
       <CardContent className="space-y-4">
         {/* Strategy Validation Status */}
         {strategyValidation && (
-          <div className={`p-3 rounded-lg border ${
-            strategyValidation.valid 
-              ? "bg-green-500/10 border-green-500/30" 
+          <div className={`p-3 rounded-lg border ${strategyValidation.valid
+              ? "bg-green-500/10 border-green-500/30"
               : "bg-yellow-500/10 border-yellow-500/30"
-          }`}>
+            }`}>
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium flex items-center gap-2">
                 {strategyValidation.valid ? (
@@ -378,7 +377,7 @@ export default function BotsPage() {
         />
         <StatCard
           label="Avg Accuracy"
-          value={`${(avgAccuracy * 100).toFixed(1)}%`}
+          value={`${avgAccuracy.toFixed(1)}%`}
           icon="📊"
           color="text-blue-500"
         />
@@ -386,15 +385,21 @@ export default function BotsPage() {
       </div>
 
       {/* Warning for models without strategy */}
-      {models.filter(m => m.is_active && !m.strategy_id).length > 0 && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            {models.filter(m => m.is_active && !m.strategy_id).length} active model(s) need strategy assignment.
-            Link strategies to enable auto-trading. Models without strategy will be skipped by auto-trading.
-          </AlertDescription>
-        </Alert>
-      )}
+      {models.filter(m => {
+        const hasBuiltIn = m.config?.strategy_type === 'ml_scalping' || m.config?.strategy_type === 'ml_profitable';
+        return m.is_active && !m.strategy_id && !hasBuiltIn;
+      }).length > 0 && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              {models.filter(m => {
+                const hasBuiltIn = m.config?.strategy_type === 'ml_scalping' || m.config?.strategy_type === 'ml_profitable';
+                return m.is_active && !m.strategy_id && !hasBuiltIn;
+              }).length} active model(s) need strategy assignment.
+              Link strategies to enable auto-trading. Models without strategy will be skipped by auto-trading.
+            </AlertDescription>
+          </Alert>
+        )}
 
       {/* Pre-trained Profitable Models */}
       {Object.keys(defaultModels).length > 0 && (
@@ -614,7 +619,7 @@ export default function BotsPage() {
                               <div className="text-center">
                                 <p className="text-muted-foreground text-xs">Accuracy</p>
                                 <p className="font-semibold">
-                                  {((model.performance_metrics.accuracy || 0) * 100).toFixed(1)}%
+                                  {(model.performance_metrics.accuracy || 0).toFixed(1)}%
                                 </p>
                               </div>
                             </div>
