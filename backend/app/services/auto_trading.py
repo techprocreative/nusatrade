@@ -330,8 +330,11 @@ class AutoTradingService:
         
         try:
             # Use PredictionService for unified ML + Strategy prediction
+            # Run in thread pool to avoid blocking the event loop (critical for WebSocket keep-alive)
+            import asyncio
             prediction_service = PredictionService(db)
-            result = prediction_service.generate_prediction(
+            result = await asyncio.to_thread(
+                prediction_service.generate_prediction,
                 model=model,
                 symbol=symbol,
                 use_strategy_rules=True,
