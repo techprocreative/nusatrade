@@ -93,18 +93,27 @@ class PredictionService:
         symbol = symbol.upper()
         timeframe = model.timeframe or "H1"
         
+        logger.debug(f"[PredictionService] Starting prediction for {model.name} on {symbol}/{timeframe}")
+        
         # Step 1: Fetch market data
+        logger.debug(f"[PredictionService] Fetching market data...")
         market_data = MarketDataFetcher.fetch_data(symbol, timeframe, bars=200)
         
         if market_data is None or len(market_data) < 50:
-            logger.error(f"Insufficient market data for {symbol}")
+            logger.error(f"[PredictionService] Insufficient market data for {symbol}: got {len(market_data) if market_data is not None else 0} bars")
             return self._create_fallback_prediction(model, symbol, "Insufficient market data")
         
+        logger.debug(f"[PredictionService] Got {len(market_data)} bars of data")
+        
         # Step 2: Build features
+        logger.debug(f"[PredictionService] Building features...")
         featured_data = self.feature_engineer.build_features(market_data)
+        logger.debug(f"[PredictionService] Features built: {len(featured_data)} rows, {len(featured_data.columns)} columns")
         
         # Step 3: Get ML prediction
+        logger.debug(f"[PredictionService] Getting ML prediction from model...")
         ml_result = self._get_ml_prediction(model, featured_data)
+        logger.info(f"[PredictionService] ML Result: direction={ml_result.get('direction')}, confidence={ml_result.get('confidence', 0):.1%}, generated_by={ml_result.get('generated_by')}")
         
         # Step 4: Get current price
         entry_price = MarketDataFetcher.get_current_price(symbol)

@@ -91,38 +91,54 @@ class AutoTradingService:
         db: Session = SessionLocal()
 
         try:
-            # Get all active models with trained file_path AND linked strategy
-            active_models = db.query(MLModel).filter(
+            # Step 1: Query ALL active trained models (we'll filter by strategy later)
+            all_active_models = db.query(MLModel).filter(
                 MLModel.is_active == True,
                 MLModel.file_path != None,
-                MLModel.strategy_id != None,  # CRITICAL: Only models with strategy
             ).all()
+            
+            logger.info(f"📊 Total active trained models: {len(all_active_models)}")
+            
+            # Step 2: Filter models that have either:
+            # - A linked strategy_id, OR
+            # - A built-in strategy (ml_scalping, ml_profitable in config)
+            active_models = []
+            models_without_strategy = []
+            
+            for model in all_active_models:
+                model_config = model.config or {}
+                strategy_type = model_config.get("strategy_type", "")
+                has_builtin = strategy_type in ["ml_scalping", "ml_profitable"]
+                
+                if model.strategy_id or has_builtin:
+                    active_models.append(model)
+                    if has_builtin:
+                        logger.info(f"   ✅ Model '{model.name}' has built-in strategy: {strategy_type}")
+                    else:
+                        logger.info(f"   ✅ Model '{model.name}' has linked strategy_id")
+                else:
+                    models_without_strategy.append(model)
+                    logger.debug(f"   ⏭️  Model '{model.name}' skipped: no strategy")
 
             results["models_checked"] = len(active_models)
-            logger.info(f"📊 Found {len(active_models)} active models with strategies")
+            logger.info(f"📈 Models ready for auto-trading: {len(active_models)}")
 
-            # Warn about models without strategy
-            models_without_strategy = db.query(MLModel).filter(
-                MLModel.is_active == True,
-                MLModel.file_path != None,
-                MLModel.strategy_id == None,
-            ).count()
-
-            if models_without_strategy > 0:
+            if models_without_strategy:
                 logger.warning(
-                    f"⚠️  {models_without_strategy} active model(s) skipped: no strategy linked. "
-                    "Please link a strategy to enable auto-trading."
+                    f"⚠️  {len(models_without_strategy)} active model(s) skipped: no strategy linked. "
+                    f"Models: {[m.name for m in models_without_strategy]}"
                 )
 
-            # Also log models without file_path
+            # Also log untrained active models
             untrained_models = db.query(MLModel).filter(
                 MLModel.is_active == True,
                 MLModel.file_path == None,
-            ).count()
+            ).all()
             
-            if untrained_models > 0:
+            if untrained_models:
                 logger.warning(
-                    f"⚠️  {untrained_models} active model(s) skipped: not trained yet."
+                    f"⚠️  {len(untrained_models)} active model(s) skipped: not trained. "
+                    f"Models: {[m.name for m in untrained_models]}"
                 )
 
             for model in active_models:
@@ -202,6 +218,7 @@ class AutoTradingService:
         }
         
         config = AutoTradingConfig.from_model_config(model.config)
+        logger.debug(f"   Config: threshold={config.confidence_threshold:.0%}, max_trades={config.max_trades_per_day}, cooldown={config.cooldown_minutes}min")
         
         # Check cooldown
         last_prediction = db.query(MLPrediction).filter(
@@ -210,10 +227,15 @@ class AutoTradingService:
         
         if last_prediction:
             cooldown_until = last_prediction.created_at + timedelta(minutes=config.cooldown_minutes)
-            if datetime.utcnow() < cooldown_until:
-                result["reason"] = f"Cooldown until {cooldown_until.isoformat()}"
-                logger.debug(f"Model {model.name} in cooldown")
+            now = datetime.utcnow()
+            if now < cooldown_until:
+                remaining = (cooldown_until - now).total_seconds() / 60
+                result["reason"] = f"Cooldown: {remaining:.1f} min remaining"
+                logger.info(f"   ⏳ Model in cooldown until {cooldown_until.strftime('%H:%M:%S')} ({remaining:.1f} min left)")
                 return result
+            logger.debug(f"   ✅ Cooldown passed (last prediction: {last_prediction.created_at.strftime('%H:%M:%S')})")
+        else:
+            logger.debug(f"   ✅ No previous predictions, no cooldown")
         
         # Check daily trade limit
         today = date.today()
@@ -222,16 +244,20 @@ class AutoTradingService:
             MLPrediction.created_at >= datetime.combine(today, datetime.min.time()),
         ).count()
         
+        logger.debug(f"   📊 Today's predictions: {today_predictions}/{config.max_trades_per_day}")
+        
         if today_predictions >= config.max_trades_per_day:
             result["reason"] = f"Max trades per day ({config.max_trades_per_day}) reached"
-            logger.debug(f"Model {model.name} reached daily limit")
+            logger.info(f"   🚫 Daily limit reached: {today_predictions}/{config.max_trades_per_day}")
             return result
         
         # Generate prediction using real model
+        logger.info(f"   🔮 Generating prediction for {model.name}...")
         prediction_data = await self._generate_real_prediction(db, model, config)
         
         if prediction_data is None:
             result["reason"] = "Failed to generate prediction"
+            logger.warning(f"   ❌ Prediction generation failed")
             return result
         
         result["prediction_generated"] = True
@@ -239,26 +265,33 @@ class AutoTradingService:
         # Check if we should execute
         direction = prediction_data.get("direction", "HOLD")
         confidence = prediction_data.get("confidence", 0)
+        generated_by = prediction_data.get("generated_by", "unknown")
+        
+        logger.info(f"   📈 Prediction: {direction} @ {confidence:.1%} (by {generated_by})")
         
         if direction == "HOLD":
-            result["reason"] = "Prediction is HOLD, no trade"
+            result["reason"] = f"Prediction is HOLD (confidence: {confidence:.1%})"
+            logger.info(f"   ⏸️  No trade: {result['reason']}")
             return result
         
         if confidence < config.confidence_threshold:
-            result["reason"] = f"Confidence {confidence:.2%} below threshold {config.confidence_threshold:.2%}"
-            logger.info(f"Model {model.name}: {result['reason']}")
+            result["reason"] = f"Confidence {confidence:.1%} below threshold {config.confidence_threshold:.0%}"
+            logger.info(f"   🔻 No trade: {result['reason']}")
             return result
         
         # Execute trade!
-        logger.info(f"Model {model.name}: Executing {direction} trade with {confidence:.2%} confidence")
+        logger.info(f"   🚀 EXECUTING TRADE: {direction} with {confidence:.1%} confidence")
+        logger.info(f"      Entry: {prediction_data.get('entry_price')}, SL: {prediction_data.get('stop_loss')}, TP: {prediction_data.get('take_profit')}")
         
         trade_executed = await self._execute_real_trade(db, model, prediction_data, config)
         result["trade_executed"] = trade_executed
         
         if trade_executed:
-            result["reason"] = f"Trade executed: {direction} with {confidence:.2%} confidence"
+            result["reason"] = f"✅ Trade executed: {direction} @ {confidence:.1%}"
+            logger.info(f"   ✅ Trade execution successful!")
         else:
             result["reason"] = "Trade execution failed"
+            logger.warning(f"   ❌ Trade execution failed")
         
         return result
     
