@@ -577,8 +577,8 @@ def activate_model(
 ):
     """Activate a model for live trading signals.
 
-    IMPORTANT: Model must be linked to a strategy before activation.
-    This ensures risk management and trading rules are properly configured.
+    Models with built-in strategies (ml_scalping, ml_profitable) can activate directly.
+    Other models must be linked to a strategy before activation.
     """
     # Validate UUID format
     model_uuid = validate_uuid(model_id, "model_id")
@@ -597,32 +597,47 @@ def activate_model(
             detail="Cannot activate untrained model",
         )
 
-    # CRITICAL: Require strategy to be linked
-    if not model.strategy_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Model must be linked to a strategy before activation. Please select or create a strategy first.",
-        )
+    # Check if model has built-in strategy (scalping/profitable models)
+    model_config = model.config or {}
+    strategy_type = model_config.get("strategy_type", "")
+    has_builtin_strategy = strategy_type in ["ml_scalping", "ml_profitable"]
+    
+    strategy = None
+    strategy_name = None
+    
+    if has_builtin_strategy:
+        # Models with built-in strategy can activate without external strategy link
+        logger.info(f"Model {model.name} has built-in strategy: {strategy_type}")
+        strategy_name = f"Built-in: {strategy_type}"
+    else:
+        # CRITICAL: Require external strategy to be linked
+        if not model.strategy_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Model must be linked to a strategy before activation. Please select or create a strategy first.",
+            )
 
-    # Verify strategy exists and is accessible (user's own OR public preset)
-    strategy = db.query(Strategy).filter(
-        Strategy.id == model.strategy_id,
-    ).filter(
-        (Strategy.user_id == current_user.id) | (Strategy.user_id.is_(None))
-    ).first()
+        # Verify strategy exists and is accessible (user's own OR public preset)
+        strategy = db.query(Strategy).filter(
+            Strategy.id == model.strategy_id,
+        ).filter(
+            (Strategy.user_id == current_user.id) | (Strategy.user_id.is_(None))
+        ).first()
 
-    if not strategy:
-        raise HTTPException(
-            status_code=400,
-            detail="Strategy not found. Please select a valid strategy.",
-        )
+        if not strategy:
+            raise HTTPException(
+                status_code=400,
+                detail="Strategy not found. Please select a valid strategy.",
+            )
 
-    # Verify user can access this strategy
-    if strategy.user_id is not None and strategy.user_id != current_user.id:
-        raise HTTPException(
-            status_code=403,
-            detail="Access denied to this strategy.",
-        )
+        # Verify user can access this strategy
+        if strategy.user_id is not None and strategy.user_id != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied to this strategy.",
+            )
+        
+        strategy_name = strategy.name
 
     # Deactivate other models first
     db.query(MLModel).filter(
@@ -633,14 +648,15 @@ def activate_model(
     model.is_active = True
     db.commit()
 
-    logger.info(f"Model {model.name} activated with strategy {strategy.name}")
+    logger.info(f"Model {model.name} activated with strategy: {strategy_name}")
 
     return {
         "id": str(model_uuid),
         "status": "active",
-        "strategy_id": str(model.strategy_id),
-        "strategy_name": strategy.name,
-        "message": "Model activated for live trading with strategy"
+        "strategy_id": str(model.strategy_id) if model.strategy_id else None,
+        "strategy_name": strategy_name,
+        "has_builtin_strategy": has_builtin_strategy,
+        "message": f"Model activated for live trading with {strategy_name}"
     }
 
 
@@ -1107,22 +1123,29 @@ def get_auto_trading_status(
 ):
     """Get auto-trading status and configuration."""
     from app.services.auto_trading import auto_trading_service
+    from sqlalchemy import or_, and_
 
-    # Get active models with strategy
-    active_models_with_strategy = db.query(MLModel).filter(
+    # Get active models that are ready for trading:
+    # 1. Has external strategy linked, OR
+    # 2. Has built-in strategy (ml_scalping, ml_profitable in config)
+    active_models = db.query(MLModel).filter(
         MLModel.user_id == current_user.id,
         MLModel.is_active == True,
         MLModel.file_path != None,
-        MLModel.strategy_id != None,
-    ).count()
-
-    # Get active models WITHOUT strategy (warning)
-    active_models_without_strategy = db.query(MLModel).filter(
-        MLModel.user_id == current_user.id,
-        MLModel.is_active == True,
-        MLModel.file_path != None,
-        MLModel.strategy_id == None,
-    ).count()
+    ).all()
+    
+    active_models_with_strategy = 0
+    active_models_without_strategy = 0
+    
+    for model in active_models:
+        config = model.config or {}
+        strategy_type = config.get("strategy_type", "")
+        has_builtin = strategy_type in ["ml_scalping", "ml_profitable"]
+        
+        if model.strategy_id or has_builtin:
+            active_models_with_strategy += 1
+        else:
+            active_models_without_strategy += 1
 
     # Get today's auto trades
     from datetime import date
@@ -1140,7 +1163,7 @@ def get_auto_trading_status(
         "predictions_today": today_trades,
         "last_run": auto_trading_service._last_run.isoformat() if auto_trading_service._last_run else None,
         "warnings": [
-            f"{active_models_without_strategy} model(s) need strategy assignment"
+            f"{active_models_without_strategy} active model(s) need strategy assignment. Link strategies to enable auto-trading. Models without strategy will be skipped by auto-trading."
         ] if active_models_without_strategy > 0 else [],
         "config": {
             "default_confidence_threshold": 0.70,

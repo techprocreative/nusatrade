@@ -67,6 +67,7 @@ def seed_scalping_model(db: Session):
         timeframe="M15",
         model_type="lightgbm",
         file_path="models/model_realistic_xauusd_M15_20251219_100151.pkl",
+        training_status="completed",  # Mark as trained
         config={
             "lookahead": 8,
             "tp_pips": 5.0,
