@@ -257,12 +257,30 @@ class PredictionService:
         """Get prediction from trained ML model with thread-safe cache."""
 
         # Check if model is trained
-        if not model.file_path or not os.path.exists(model.file_path):
-            logger.warning(f"Model {model.name} not trained or file not found")
+        if not model.file_path:
+            logger.warning(f"Model {model.name} has no file_path")
             return {
                 "direction": "HOLD",
                 "confidence": 0.0,
                 "generated_by": "fallback",
+                "probabilities": {}
+            }
+        
+        # Resolve model path - handle relative paths
+        model_path = model.file_path
+        if not os.path.isabs(model_path):
+            # Try relative to backend directory
+            backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            model_path = os.path.join(backend_dir, model_path)
+            logger.debug(f"Resolved model path: {model_path}")
+        
+        if not os.path.exists(model_path):
+            logger.warning(f"Model {model.name} file not found at: {model_path}")
+            return {
+                "direction": "HOLD",
+                "confidence": 0.0,
+                "generated_by": "fallback",
+                "error": f"File not found: {model_path}",
                 "probabilities": {}
             }
 
@@ -271,7 +289,7 @@ class PredictionService:
         strategy_type = model_config.get("strategy_type", "")
         
         if strategy_type == "ml_scalping" or "scalping" in model.file_path.lower():
-            return self._get_scalping_prediction(model, featured_data)
+            return self._get_scalping_prediction(model, featured_data, model_path)
         
         # Standard ML model loading (with thread-safe caching)
         model_id = str(model.id)
@@ -318,7 +336,8 @@ class PredictionService:
     def _get_scalping_prediction(
         self,
         model: MLModel,
-        featured_data: pd.DataFrame
+        featured_data: pd.DataFrame,
+        model_path: str
     ) -> Dict[str, Any]:
         """Get prediction from scalping model (LightGBM/XGBoost with custom features)."""
         import pickle
@@ -330,10 +349,10 @@ class PredictionService:
             
             with self._cache_lock:
                 if model_id not in self._model_cache:
-                    with open(model.file_path, 'rb') as f:
+                    with open(model_path, 'rb') as f:
                         model_data = pickle.load(f)
                     self._model_cache[model_id] = model_data
-                    logger.info(f"Loaded scalping model: {model.name}")
+                    logger.info(f"Loaded scalping model: {model.name} from {model_path}")
                 
                 model_data = self._model_cache[model_id]
             
@@ -399,9 +418,23 @@ class PredictionService:
                 "probabilities": {signal_map[i]: float(proba[i]) for i in range(len(proba))},
             }
             
+        except FileNotFoundError as e:
+            logger.error(f"Scalping model file not found at {model.file_path}: {e}")
+            return {
+                "direction": "HOLD",
+                "confidence": 0.0,
+                "generated_by": "fallback",
+                "error": f"Model file not found: {model.file_path}",
+            }
         except Exception as e:
-            logger.error(f"Scalping prediction failed: {e}")
-            return {"direction": "HOLD", "confidence": 0.0, "generated_by": "fallback"}
+            import traceback
+            logger.error(f"Scalping prediction failed for {model.name}: {e}\n{traceback.format_exc()}")
+            return {
+                "direction": "HOLD",
+                "confidence": 0.0,
+                "generated_by": "fallback",
+                "error": str(e),
+            }
     
     def _create_scalping_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Create features for scalping model prediction."""
